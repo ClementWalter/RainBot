@@ -1,0 +1,1 @@
+clock: python rainbot.py

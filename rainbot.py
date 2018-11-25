@@ -1,11 +1,17 @@
-import os
 import datetime
+import os
 import warnings
 
 import requests
+from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 
+PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 
+scheduler = BlockingScheduler()
+
+
+@scheduler.scheduled_job('cron', day_of_week='mon', hour=8)
 def book_tennis_court():
     # Login request
     session = requests.session()
@@ -26,7 +32,7 @@ def book_tennis_court():
 
     # Find time spot
     booking_date = (datetime.datetime.now() + datetime.timedelta(days=6)).strftime('%d/%m/%Y')
-    recherche_data = {
+    search_data = {
         'hourRange': '20-22',
         'when': booking_date,
         'selWhereTennisName': ['Bertrand Dauvin', 'Jules Ladoumègue', 'Docteurs Déjerine', 'Sept Arpents'],
@@ -34,7 +40,10 @@ def book_tennis_court():
         'selInOut': ['V', 'F'],  # V = couvert, F = non couvert
     }
     response = session.post(
-        'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&action=rechercher_creneau', recherche_data)
+        PARIS_TENNIS_URL,
+        search_data,
+        params={'page': 'recherche', 'action': 'rechercher_creneau'}
+    )
     soup = BeautifulSoup(response.text, features='html5lib')
     courts = soup.findAll('button', {'class': 'buttonAllOk'})
 
@@ -49,22 +58,26 @@ def book_tennis_court():
         'annulation': False
     }
     session.post(
-        'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=reservation&view=reservation_creneau',
+        PARIS_TENNIS_URL,
         reservation_data,
+        params={'page': 'reservation', 'view': 'reservation_creneau'}
     )
     player_data = {
-        'player1': ['Lafont', 'Marc', ''],
+        'player1': ['Roger', 'Federer', ''],
         'counter': '',
         'submitControle': 'submit'
     }
     session.post(
-        'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=reservation&action=validation_court',
+        PARIS_TENNIS_URL,
         player_data,
+        params={'page': 'reservation', 'action': 'validation_court'}
     )
 
     # Page paiement
     response = session.get(
-        'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=reservation&view=methode_paiement')
+        PARIS_TENNIS_URL,
+        params={'page': 'reservation', 'view': 'methode_paiement'}
+    )
     soup = BeautifulSoup(response.text, features='html5lib')
     if soup.find('table', {'nbtickets': 10}):
         return warnings.warn('Insufficient credit to proceed with payment. Reservation on hold for 15 minutes.')
@@ -75,9 +88,9 @@ def book_tennis_court():
         'paymentMode': 'existingTicket',
         'nbTickets': '1',
     }
-    session.post('https://tennis.paris.fr/tennis/jsp/site/Portal.jsp', payment_data)
+    session.post(PARIS_TENNIS_URL, payment_data)
     return 'Court successfully booked'
 
 
 if __name__ == '__main__':
-    book_tennis_court()
+    scheduler.start()
