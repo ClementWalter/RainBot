@@ -1,2 +1,2 @@
 clock: python rainbot.py
-clock: python test_clocks.py
+clock: python test_clock.py
