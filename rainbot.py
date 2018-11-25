@@ -11,7 +11,7 @@ PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 scheduler = BlockingScheduler()
 
 
-@scheduler.scheduled_job('cron', day_of_week='mon', hour=8)
+@scheduler.scheduled_job('cron', day_of_week='mon', hour=8, minute=2)
 def book_tennis_court():
     # Login request
     session = requests.session()
