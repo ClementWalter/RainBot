@@ -1,1 +1,1 @@
-clock: python rainbot.py
+web: python rainbot.py
