@@ -9,9 +9,9 @@ from bs4 import BeautifulSoup
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 DAY_OF_WEEK = os.getenv('DAY_OF_WEEK', 'tue')
-HOUR = os.getenv('HOUR', 8)
-MINUTE = os.getenv('MINUTE', 2)
-JITTER = os.getenv('JITTER', 100)
+HOUR = int(os.getenv('HOUR', 8))
+MINUTE = int(os.getenv('MINUTE', 2))
+JITTER = int(os.getenv('JITTER', 100))
 
 scheduler = BlockingScheduler()
 
