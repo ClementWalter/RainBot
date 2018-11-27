@@ -1,11 +1,14 @@
 # coding=UTF-8
 import datetime
+import logging
 import os
-import warnings
 
 import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
+
+logging.basicConfig()
+logging.getLogger('apscheduler').setLevel(logging.INFO)
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 DAY_OF_WEEK = os.getenv('DAY_OF_WEEK', 'tue')
@@ -53,7 +56,7 @@ def book_tennis_court():
     courts = soup.findAll('button', {'class': 'buttonAllOk'})
 
     if not courts:
-        return warnings.warn(f'No court available on {booking_date}')
+        return logging.log(logging.WARNING, f'No court available on {booking_date}')
 
     reservation_data = {
         'equipmentId': courts[0].attrs['equipmentid'],
@@ -85,7 +88,8 @@ def book_tennis_court():
     )
     soup = BeautifulSoup(response.text, features='html5lib')
     if soup.find('table', {'nbtickets': 10}):
-        return warnings.warn('Insufficient credit to proceed with payment. Reservation on hold for 15 minutes.')
+        return logging.log(logging.WARNING,
+            'Insufficient credit to proceed with payment. Reservation on hold for 15 minutes.')
 
     payment_data = {
         'page': 'reservation',
@@ -94,7 +98,7 @@ def book_tennis_court():
         'nbTickets': '1',
     }
     session.post(PARIS_TENNIS_URL, payment_data)
-    return 'Court successfully booked'
+    return logging.log(logging.INFO, 'Court successfully booked')
 
 
 if __name__ == '__main__':
