@@ -6,23 +6,17 @@ import warnings
 import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
-from flask import Flask
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 DAY_OF_WEEK = os.getenv('DAY_OF_WEEK', 'tue')
 HOUR = os.getenv('HOUR', 8)
 MINUTE = os.getenv('MINUTE', 2)
+JITTER = os.getenv('JITTER', 100)
 
 scheduler = BlockingScheduler()
-app = Flask(__name__)
 
 
-@app.route('/')
-def hello_world():
-    return 'Hello RainBot!'
-
-
-@scheduler.scheduled_job('cron', day_of_week=DAY_OF_WEEK, hour=HOUR, minute=MINUTE, jitter=100)
+@scheduler.scheduled_job('cron', day_of_week=DAY_OF_WEEK, hour=HOUR, minute=MINUTE, jitter=JITTER)
 def book_tennis_court():
     # Login request
     session = requests.session()
@@ -104,6 +98,4 @@ def book_tennis_court():
 
 
 if __name__ == '__main__':
-    PORT = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=PORT, debug=True)
     scheduler.start()

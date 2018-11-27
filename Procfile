@@ -1,1 +1,1 @@
-web: python rainbot.py
+worker: python rainbot.py
