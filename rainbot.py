@@ -59,7 +59,7 @@ def book_tennis_court():
     courts = soup.findAll('button', {'class': 'buttonAllOk'})
 
     if not courts:
-        raise ValueError(f'No court available on {booking_date}')
+        return warnings.warn(f'No court available on {booking_date}')
 
     reservation_data = {
         'equipmentId': courts[0].attrs['equipmentid'],
