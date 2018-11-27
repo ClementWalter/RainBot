@@ -8,7 +8,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 
 logging.basicConfig()
-logging.getLogger('apscheduler').setLevel(logging.INFO)
+logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
 DAY_OF_WEEK = os.getenv('DAY_OF_WEEK', 'tue')
