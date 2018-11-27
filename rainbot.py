@@ -7,11 +7,14 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
+DAY_OF_WEEK = os.getenv('DAY_OF_WEEK', 'tue')
+HOUR = os.getenv('HOUR', 8)
+MINUTE = os.getenv('MINUTE', 2)
 
 scheduler = BlockingScheduler()
 
 
-@scheduler.scheduled_job('cron', day_of_week='mon', hour=8, minute=2)
+@scheduler.scheduled_job('cron', day_of_week=DAY_OF_WEEK, hour=HOUR, minute=MINUTE, jitter=100)
 def book_tennis_court():
     # Login request
     session = requests.session()
