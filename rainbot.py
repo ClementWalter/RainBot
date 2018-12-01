@@ -112,6 +112,7 @@ def create_booking_job(username, password):
 def create_scheduler():
     scheduler = BlockingScheduler()
     for username, password, day_of_booking in zip(USERNAMES, PASSWORDS, DAYS_OF_BOOKING):
+        logging.log(logging.INFO, f'Creating booking job for {username} on {day_of_booking}')
         scheduler.add_job(
             create_booking_job(username, password),
             'cron', day_of_week=day_of_booking, hour=HOUR, minute=MINUTE, jitter=JITTER,
