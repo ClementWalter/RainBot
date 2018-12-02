@@ -7,16 +7,18 @@ import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 
-logging.basicConfig()
+logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 
 PARIS_TENNIS_URL = 'https://tennis.paris.fr/tennis/jsp/site/Portal.jsp'
+# Cron info
 DAYS_OF_BOOKING = os.getenv('DAYS_OF_BOOKING', 'tue').split(',')
-USERNAMES = os.getenv('USERNAME', '').split(',')
-PASSWORDS = os.getenv('PASSWORD', '').split(',')
-HOUR = int(os.getenv('HOUR', 8))
+HOUR = int(os.getenv('HOUR', 7))
 MINUTE = int(os.getenv('MINUTE', 2))
 JITTER = int(os.getenv('JITTER', 100))
+# User info
+USERNAMES = os.getenv('USERNAME', '').split(',')
+PASSWORDS = os.getenv('PASSWORD', '').split(',')
 HOUR_FROM = int(os.getenv('HOUR_FROM', 20))
 HOUR_TO = int(os.getenv('HOUR_TO', 22))
 TENNIS_LIST = os.getenv('TENNIS_LIST', 'Bertrand Dauvin,Jules Ladoumègue,Docteurs Déjerine,Sept Arpents').split(',')
@@ -57,8 +59,16 @@ def create_booking_job(username, password):
             params={'page': 'recherche', 'action': 'rechercher_creneau'}
         )
         soup = BeautifulSoup(response.text, features='html5lib')
-        courts = soup.findAll('button', {'class': 'buttonAllOk'})
 
+        user_not_logged_in = soup.find('a', {'onclick': 'displayCreateAccountPage();'})
+        if user_not_logged_in:
+            return logging.log(logging.ERROR, f'{username} failed to log in')
+
+        player_has_reservation = soup.find('button', {'class': 'buttonHasReservation'})
+        if player_has_reservation:
+            return logging.log(logging.WARNING, f'User {username} has already an active reservation')
+
+        courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
             return logging.log(logging.WARNING, f'No court available on {booking_date}')
 
@@ -85,7 +95,7 @@ def create_booking_job(username, password):
             params={'page': 'reservation', 'action': 'validation_court'}
         )
 
-        # Page paiement
+        # Payment page
         response = session.get(
             PARIS_TENNIS_URL,
             params={'page': 'reservation', 'view': 'methode_paiement'}
