@@ -21,7 +21,7 @@ USERNAMES = os.getenv('USERNAMES', '').split(',')
 PASSWORDS = os.getenv('PASSWORDS', '').split(',')
 HOUR_FROM = int(os.getenv('HOUR_FROM', 20))
 HOUR_TO = int(os.getenv('HOUR_TO', 22))
-TENNIS_LIST = os.getenv('TENNIS_LIST', 'Bertrand Dauvin,Jules Ladoumègue,Docteurs Déjerine,Sept Arpents').split(',')
+TENNIS_LIST = os.getenv('TENNIS_LIST', 'Sept Arpents,Bertrand Dauvin,Jules Ladoumègue,Docteurs Déjerine').split(',')
 IN_OUT = os.getenv('IN_OUT', 'V').split(',')  # V = couvert, F = non couvert
 
 
@@ -72,6 +72,7 @@ def create_booking_job(username, password):
         if not courts:
             return logging.log(logging.WARNING, f'No court available on {booking_date}')
 
+        courts.sort(key=lambda court: court.attrs['datedeb'])
         reservation_data = {
             'equipmentId': courts[0].attrs['equipmentid'],
             'courtId': courts[0].attrs['courtid'],
