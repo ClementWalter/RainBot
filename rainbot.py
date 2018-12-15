@@ -80,27 +80,34 @@ def create_booking_job(username, password):
             'dateFin': courts[0].attrs['datefin'],
             'annulation': False
         }
-        session.post(
+        response = session.post(
             PARIS_TENNIS_URL,
             reservation_data,
             params={'page': 'reservation', 'view': 'reservation_creneau'}
         )
+        if response.status_code >= 400:
+            return logging.log(logging.ERROR, f'Error received from server')
         player_data = {
             'player1': ['Roger', 'Federer', ''],
             'counter': '',
             'submitControle': 'submit'
         }
-        session.post(
+        response = session.post(
             PARIS_TENNIS_URL,
             player_data,
             params={'page': 'reservation', 'action': 'validation_court'}
         )
+        if response.status_code >= 400:
+            return logging.log(logging.ERROR, f'Error received from server')
 
         # Payment page
         response = session.get(
             PARIS_TENNIS_URL,
             params={'page': 'reservation', 'view': 'methode_paiement'}
         )
+        if response.status_code >= 400:
+            return logging.log(logging.ERROR, f'Error received from server')
+
         soup = BeautifulSoup(response.text, features='html5lib')
         if soup.find('table', {'nbtickets': 10}):
             return logging.log(
