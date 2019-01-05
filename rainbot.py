@@ -70,7 +70,7 @@ def create_booking_job(username, password):
 
         courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
-            return logging.log(logging.WARNING, f'No court available on {booking_date}')
+            return logging.log(logging.WARNING, f'No court available on {booking_date} for {username}')
 
         courts.sort(key=lambda court: court.attrs['datedeb'])
         reservation_data = {
@@ -112,7 +112,7 @@ def create_booking_job(username, password):
         if soup.find('table', {'nbtickets': 10}):
             return logging.log(
                 logging.WARNING,
-                'Insufficient credit to proceed with payment. Reservation on hold for 15 minutes.'
+                f'Insufficient credit to proceed with payment for {username}. Reservation on hold for 15 minutes.'
             )
 
         payment_data = {
@@ -122,7 +122,7 @@ def create_booking_job(username, password):
             'nbTickets': '1',
         }
         session.post(PARIS_TENNIS_URL, payment_data)
-        return logging.log(logging.INFO, 'Court successfully booked')
+        return logging.log(logging.INFO, f'Court successfully booked for {username}')
 
     return book_tennis_court
 
