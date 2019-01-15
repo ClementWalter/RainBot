@@ -24,11 +24,11 @@ USERNAMES = os.getenv('USERNAMES', '').split(',')
 PASSWORDS = os.getenv('PASSWORDS', '').split(',')
 HOUR_FROM = int(os.getenv('HOUR_FROM'))
 HOUR_TO = int(os.getenv('HOUR_TO'))
-PLACES_LIST = os.getenv('PLACES_LIST').split(',')
+PLACES_LIST = [places.split(',') for places in os.getenv('PLACES_LIST').split(';')]
 IN_OUT = os.getenv('IN_OUT', 'V').split(',')  # V = couvert, F = non couvert
 
 
-def create_booking_job(username, password):
+def create_booking_job(username, password, places):
     def book_court():
         # Login request
         session = requests.session()
@@ -52,7 +52,7 @@ def create_booking_job(username, password):
         search_data = {
             'hourRange': f'{HOUR_FROM}-{HOUR_TO}',
             'when': booking_date,
-            'selWhereTennisName': PLACES_LIST,
+            'selWhereTennisName': places,
             'selCoating': ['96', '2095', '94', '1324', '2016', '92'],
             'selInOut': IN_OUT,
         }
@@ -132,10 +132,10 @@ def create_booking_job(username, password):
 
 def create_scheduler():
     scheduler = BlockingScheduler()
-    for username, password, day_of_booking in zip(USERNAMES, PASSWORDS, DAYS_OF_BOOKING):
+    for username, password, day_of_booking, places in zip(USERNAMES, PASSWORDS, DAYS_OF_BOOKING, PLACES_LIST):
         logging.log(logging.INFO, f'Creating booking job for {username} on {day_of_booking}')
         scheduler.add_job(
-            create_booking_job(username, password),
+            create_booking_job(username, password, places),
             'cron', day_of_week=day_of_booking, hour=HOUR, minute=MINUTE, second=SECOND, jitter=JITTER,
         )
     return scheduler
