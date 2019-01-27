@@ -2,6 +2,7 @@
 import datetime
 import logging
 import os
+import time
 
 import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
@@ -100,8 +101,17 @@ def create_booking_job(username, password, places):
             player_data,
             params={'page': 'reservation', 'action': 'validation_court'}
         )
+        attempts = 1
+        while response.status_code >= 400 and attempts < 5:
+            attempts += 1
+            time.sleep(5)
+            response = session.post(
+                BOOKING_URL,
+                player_data,
+                params={'page': 'reservation', 'action': 'validation_court'}
+            )
         if response.status_code >= 400:
-            return logging.log(logging.ERROR, f'Error received from server')
+            return logging.log(logging.ERROR, f'Cannot validate reservation after {attempts} trials')
 
         # Payment page
         response = session.get(
