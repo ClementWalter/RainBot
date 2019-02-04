@@ -23,13 +23,13 @@ JITTER = int(os.getenv('JITTER'))
 # Users info
 USERNAMES = os.getenv('USERNAMES', '').split(',')
 PASSWORDS = os.getenv('PASSWORDS', '').split(',')
-HOUR_FROM = int(os.getenv('HOUR_FROM'))
-HOUR_TO = int(os.getenv('HOUR_TO'))
+HOURS_FROM = os.getenv('HOURS_FROM').split(',')
+HOURS_TO = os.getenv('HOURS_TO').split(',')
 PLACES_LIST = [places.split(',') for places in os.getenv('PLACES_LIST').split(';')]
 IN_OUT = os.getenv('IN_OUT', 'V').split(',')  # V = couvert, F = non couvert
 
 
-def create_booking_job(username, password, places):
+def create_booking_job(username, password, places, hour_from, hour_to):
     def book_court():
         # Login request
         session = requests.session()
@@ -51,7 +51,7 @@ def create_booking_job(username, password, places):
         # Find time spot
         booking_date = (datetime.datetime.now() + datetime.timedelta(days=6)).strftime('%d/%m/%Y')
         search_data = {
-            'hourRange': f'{HOUR_FROM}-{HOUR_TO}',
+            'hourRange': f'{hour_from}-{hour_to}',
             'when': booking_date,
             'selWhereTennisName': places,
             'selCoating': ['96', '2095', '94', '1324', '2016', '92'],
@@ -142,10 +142,10 @@ def create_booking_job(username, password, places):
 
 def create_scheduler():
     scheduler = BlockingScheduler()
-    for username, password, day_of_booking, places in zip(USERNAMES, PASSWORDS, DAYS_OF_BOOKING, PLACES_LIST):
+    for username, password, day_of_booking, places, hour_from, hour_to in zip(USERNAMES, PASSWORDS, DAYS_OF_BOOKING, PLACES_LIST, HOURS_FROM, HOURS_TO):
         logging.log(logging.INFO, f'Creating booking job for {username} on {day_of_booking}')
         scheduler.add_job(
-            create_booking_job(username, password, places),
+            create_booking_job(username, password, places, hour_from, hour_to),
             'cron', day_of_week=day_of_booking, hour=HOUR, minute=MINUTE, second=SECOND, jitter=JITTER,
         )
     return scheduler
