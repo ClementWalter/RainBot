@@ -160,7 +160,7 @@ def create_scheduler():
         )
         [['Username', 'Password', 'places', 'HourFrom', 'HourTo', 'in_out', 'day_of_booking']]
     )
-    for row in booking_references.iterrows():
+    for _, row in booking_references.iterrows():
         logging.log(logging.INFO, f'Creating booking job for {row.Username} playing on {row.match_day}')
         scheduler.add_job(
             create_booking_job(row.Username, row.Password, row.places, row.HourFrom, row.HourTo, row.in_out),
