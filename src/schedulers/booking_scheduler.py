@@ -158,7 +158,7 @@ def create_scheduler():
             match_day=lambda df: pd.Categorical(df.match_day, categories=DAYS_OF_WEEK.values(), ordered=True),
             day_of_booking=lambda df: (df.match_day.cat.codes + 1 % 7).map(lambda x: DAYS_OF_WEEK[x])
         )
-        [['Username', 'Password', 'places', 'HourFrom', 'HourTo', 'in_out', 'day_of_booking']]
+        [['Username', 'Password', 'places', 'HourFrom', 'HourTo', 'in_out', 'day_of_booking', 'match_day']]
     )
     for _, row in booking_references.iterrows():
         logging.log(logging.INFO, f'Creating booking job for {row.Username} playing on {row.match_day}')
