@@ -38,29 +38,27 @@ def create_booking_job(username, password, places, hour_from, hour_to, in_out):
     def book_court():
         # Login request
         session = requests.session()
-        response = session.get('%sPortal.jsp' % LOGIN_URL)
+        response = session.get(LOGIN_URL)
         soup = BeautifulSoup(response.text, features='html5lib')
-        token_input = soup.find('input', {'name': 'token'})
-        token = token_input.attrs['value']
+        token_input = soup.find(id='form-login')
+        route = token_input.attrs['action']
         login_data = {
-            'page': 'mylutece',
-            'action': 'dologin',
-            'token': token,
-            'auth_provider': 'mylutece-openam',
             'username': username,
             'password': password,
             'Submit': '',
         }
-        session.post('%splugins/mylutece/DoMyLuteceLogin.jsp' % LOGIN_URL, login_data)
+        session.post(route, login_data)
 
         # Find time spot
+        session.get(BOOKING_URL, params={'page': 'recherche', 'action': 'rechercher_creneau'})
         booking_date = (datetime.datetime.now() + datetime.timedelta(days=6)).strftime('%d/%m/%Y')
         search_data = {
-            'hourRange': f'{hour_from}-{hour_to}',
-            'when': booking_date,
+            'where': places,
             'selWhereTennisName': places,
+            'when': booking_date,
             'selCoating': ['96', '2095', '94', '1324', '2016', '92'],
             'selInOut': in_out,
+            'hourRange': f'{hour_from}-{hour_to}',
         }
         response = session.post(
             BOOKING_URL,
@@ -139,8 +137,10 @@ def create_booking_job(username, password, places, hour_from, hour_to, in_out):
             'paymentMode': 'existingTicket',
             'nbTickets': '1',
         }
-        session.post(BOOKING_URL, payment_data)
-        return logging.log(logging.INFO, f'Court successfully booked for {username}')
+        response = session.post(BOOKING_URL, payment_data)
+        if response.status_code == 200:
+            return logging.log(logging.INFO, f'Court successfully booked for {username}')
+        return logging.log(logging.ERROR, f'Cannot book court for {username}')
 
     return book_court
 
