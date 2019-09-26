@@ -1,14 +1,14 @@
-import datetime
 import logging
 import os
 import time
+from inflection import underscore
 
-import pandas as pd
 import requests
 from apscheduler.schedulers.blocking import BlockingScheduler
 from bs4 import BeautifulSoup
 
 from src.spreadsheet import DriveClient
+from src.utils import date_of_next_day
 
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger('apscheduler').setLevel(logging.DEBUG)
@@ -16,7 +16,7 @@ logging.getLogger('apscheduler').setLevel(logging.DEBUG)
 # Site info
 LOGIN_URL = os.getenv('LOGIN_URL')
 BOOKING_URL = os.getenv('BOOKING_URL')
-DAYS_OF_WEEK = dict(zip(range(7), ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']))
+DAYS_OF_WEEK = dict(zip(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], range(7)))
 DAYS_FRENCH_TO_ENGLISH = {
     'lundi': 'mon',
     'mardi': 'tue',
@@ -28,13 +28,13 @@ DAYS_FRENCH_TO_ENGLISH = {
 }
 
 # Cron info
-HOUR = int(os.getenv('HOUR', 7))
+HOUR = int(os.getenv('HOUR', 0))
 MINUTE = int(os.getenv('MINUTE', 0))
-SECOND = int(os.getenv('SECOND', 2))
+SECOND = int(os.getenv('SECOND', 0))
 JITTER = int(os.getenv('JITTER', 0))
 
 
-def create_booking_job(username, password, places, hour_from, hour_to, in_out):
+def create_booking_job(username, password, places, match_day, hour_from, hour_to, in_out, **_):
     def book_court():
         # Login request
         session = requests.session()
@@ -51,11 +51,10 @@ def create_booking_job(username, password, places, hour_from, hour_to, in_out):
 
         # Find time spot
         session.get(BOOKING_URL, params={'page': 'recherche', 'action': 'rechercher_creneau'})
-        booking_date = (datetime.datetime.now() + datetime.timedelta(days=6)).strftime('%d/%m/%Y')
         search_data = {
             'where': places,
             'selWhereTennisName': places,
-            'when': booking_date,
+            'when': match_day,
             'selCoating': ['96', '2095', '94', '1324', '2016', '92'],
             'selInOut': in_out,
             'hourRange': f'{hour_from}-{hour_to}',
@@ -77,7 +76,7 @@ def create_booking_job(username, password, places, hour_from, hour_to, in_out):
 
         courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
-            return logging.log(logging.WARNING, f'No court available on {booking_date} for {username}')
+            return logging.log(logging.WARNING, f'No court available on {match_day} for {username}')
 
         courts.sort(key=lambda court: court.attrs['datedeb'])
         reservation_data = {
@@ -147,23 +146,25 @@ def create_booking_job(username, password, places, hour_from, hour_to, in_out):
 
 def create_scheduler():
     scheduler = BlockingScheduler()
+
     booking_references = (
         DriveClient().get_sheet_as_dataframe('RainBot')
+        .rename(columns=underscore)
+        .rename(columns={'courts': 'places'})
         .assign(
-            match_day=lambda df: df.MatchDay.str.lower().replace(DAYS_FRENCH_TO_ENGLISH),
-            in_out=lambda df: df.InOut.replace({'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}).str.split(','),
-            places=lambda df: df.Courts.str.split(',')
+            match_day=lambda df: (
+                df.match_day.str.lower()
+                .replace(DAYS_FRENCH_TO_ENGLISH)
+                .replace(DAYS_OF_WEEK)
+                .map(date_of_next_day)
+            ),
+            in_out=lambda df: df.in_out.replace({'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}).str.split(','),
+            places=lambda df: df.places.str.split(','),
         )
-        .assign(
-            match_day=lambda df: pd.Categorical(df.match_day, categories=DAYS_OF_WEEK.values(), ordered=True),
-            day_of_booking=lambda df: (df.match_day.cat.codes + 1 % 7).map(lambda x: DAYS_OF_WEEK[x])
-        )
-        [['Username', 'Password', 'places', 'HourFrom', 'HourTo', 'in_out', 'day_of_booking', 'match_day']]
     )
     for _, row in booking_references.iterrows():
-        logging.log(logging.INFO, f'Creating booking job for {row.Username} playing on {row.match_day}')
+        logging.log(logging.INFO, f'Creating booking job for {row.username} playing on {row.match_day}')
         scheduler.add_job(
-            create_booking_job(row.Username, row.Password, row.places, row.HourFrom, row.HourTo, row.in_out),
-            'cron', day_of_week=row.day_of_booking, hour=HOUR, minute=MINUTE, second=SECOND, jitter=JITTER,
+            create_booking_job(**row), 'interval', hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER
         )
     return scheduler
