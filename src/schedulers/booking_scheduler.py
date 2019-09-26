@@ -1,6 +1,9 @@
 import logging
 import os
 import time
+from datetime import datetime
+
+import pytz
 from inflection import underscore
 
 import requests
@@ -166,5 +169,10 @@ def create_scheduler():
         logging.log(logging.INFO, f'Creating booking job for {row.username} playing on {row.match_day}')
         scheduler.add_job(
             create_booking_job(**row), 'interval', hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER
+        )
+        next_day_code = (datetime.strptime(row.match_day, "%d/%m/%Y").weekday() + 1) % 7
+        opening_hour_utc = int(8 - datetime.now(pytz.timezone('Europe/Paris')).utcoffset().total_seconds() // 3600)
+        scheduler.add_job(
+            create_booking_job(**row), 'cron', day_of_week=next_day_code, hour=opening_hour_utc, second=2, jitter=1
         )
     return scheduler
