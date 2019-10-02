@@ -172,13 +172,14 @@ def create_scheduler():
         )
         next_day_code = (datetime.strptime(row.match_day, "%d/%m/%Y").weekday() + 1) % 7
         opening_hour_utc = int(8 - datetime.now(pytz.timezone('Europe/Paris')).utcoffset().total_seconds() // 3600)
-        scheduler.add_job(
-            create_booking_job(**row),
-            'cron',
-            day_of_week=next_day_code,
-            hour=opening_hour_utc,
-            minute=MINUTE,
-            second=SECOND,
-            jitter=JITTER,
-        )
+        for minute in range(MINUTE):
+            scheduler.add_job(
+                create_booking_job(**row),
+                'cron',
+                day_of_week=next_day_code,
+                hour=opening_hour_utc,
+                minute=minute,
+                second=SECOND,
+                jitter=JITTER,
+            )
     return scheduler
