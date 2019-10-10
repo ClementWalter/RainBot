@@ -6,6 +6,7 @@ cachetools==3.1.1
 certifi==2018.10.15
 chardet==3.0.4
 Click==7.0
+confluent-kafka==1.2.0
 df2gspread==1.0.4
 Flask==1.0.2
 Flask-RESTful==0.3.7

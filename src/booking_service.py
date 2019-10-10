@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup
 
 BOOKING_URL = os.getenv('BOOKING_URL')
 LOGIN_URL = os.getenv('LOGIN_URL')
+logger = logging.getLogger(__name__)
 
 
 class BookingService:
@@ -49,12 +50,12 @@ class BookingService:
             return [court.text[:2] for court in soup.findAll('h4', {'class': 'panel-title'})]
 
         if soup.find('button', {'class': 'buttonHasReservation'}):
-            logging.log(logging.WARNING, f'User {self._username} has already an active reservation')
+            logger.log(logging.WARNING, f'User {self._username} has already an active reservation')
             return
 
         courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
-            logging.log(logging.WARNING, f'No court available for {self._username}')
+            logger.log(logging.WARNING, f'No court available for {self._username}')
             return
 
         courts.sort(key=lambda court: court.attrs['datedeb'])
@@ -82,7 +83,7 @@ class BookingService:
             params={'page': 'reservation', 'view': 'methode_paiement'}
         )
         if self.soup(response).find('table', {'nbtickets': 10}):
-            return logging.log(
+            return logger.log(
                 logging.WARNING,
                 f'Insufficient credit to proceed with payment for {self._username}. Reservation on hold for 15 minutes.'
             )
@@ -95,8 +96,8 @@ class BookingService:
         }
         response = self.session.post(BOOKING_URL, payment_data)
         if response.status_code == 200:
-            logging.log(logging.INFO, f'Court successfully paid for {self._username}')
-        logging.log(logging.ERROR, f'Cannot pay court for {self._username}')
+            logger.log(logging.INFO, f'Court successfully paid for {self._username}')
+        logger.log(logging.ERROR, f'Cannot pay court for {self._username}')
         return response
 
     def book_court(self, *args, **kwargs):

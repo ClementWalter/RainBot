@@ -15,6 +15,7 @@ DAYS_FRENCH_TO_ENGLISH = {
     'samedi': 'sat',
     'dimanche': 'sun',
 }
+logger = logging.getLogger(__name__)
 
 
 def booking_job():
@@ -38,7 +39,7 @@ def booking_job():
         response = booking_service.find_courts(**row.drop(['username', 'password']))
         courts = booking_service.parse_courts(response)
         if not courts:
-            logging.log(logging.WARNING, f'No court available for {row.username} playing on {row.match_day}')
+            logger.log(logging.WARNING, f'No court available for {row.username} playing on {row.match_day}')
         else:
             booking_service.login(row.username, row.password)
             booking_service.book_court(**row.drop(['username', 'password']))

@@ -6,8 +6,8 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from src.schedulers.cron_jobs import booking_job
 
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger('apscheduler').setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.WARNING)
+logging.getLogger('apscheduler').setLevel(logging.INFO)
 
 # Cron info
 HOUR = int(os.getenv('HOUR', 0))
