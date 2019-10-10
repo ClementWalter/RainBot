@@ -4,6 +4,8 @@ import os
 import requests
 from bs4 import BeautifulSoup
 
+from src.producers import p, topic_prefix
+
 BOOKING_URL = os.getenv('BOOKING_URL')
 LOGIN_URL = os.getenv('LOGIN_URL')
 logger = logging.getLogger(__name__)
@@ -50,12 +52,16 @@ class BookingService:
             return [court.text[:2] for court in soup.findAll('h4', {'class': 'panel-title'})]
 
         if soup.find('button', {'class': 'buttonHasReservation'}):
-            logger.log(logging.WARNING, f'User {self._username} has already an active reservation')
+            message = f'User {self._username} has already an active reservation'
+            logger.log(logging.WARNING, message)
+            p.produce(f'{topic_prefix}default', message)
             return
 
         courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
-            logger.log(logging.WARNING, f'No court available for {self._username}')
+            message = f'No court available for {self._username}'
+            logger.log(logging.WARNING, message)
+            p.produce(f'{topic_prefix}default', message)
             return
 
         courts.sort(key=lambda court: court.attrs['datedeb'])
@@ -83,10 +89,13 @@ class BookingService:
             params={'page': 'reservation', 'view': 'methode_paiement'}
         )
         if self.soup(response).find('table', {'nbtickets': 10}):
-            return logger.log(
-                logging.WARNING,
-                f'Insufficient credit to proceed with payment for {self._username}. Reservation on hold for 15 minutes.'
+            message = (
+                f'Insufficient credit to proceed with payment for {self._username}. Reservation on hold for 15 '
+                f'minutes.'
             )
+            p.produce(f'{topic_prefix}default', message)
+            logger.log(logging.WARNING, message)
+            return
 
         payment_data = {
             'page': 'reservation',
@@ -96,8 +105,12 @@ class BookingService:
         }
         response = self.session.post(BOOKING_URL, payment_data)
         if response.status_code == 200:
-            logger.log(logging.INFO, f'Court successfully paid for {self._username}')
-        logger.log(logging.ERROR, f'Cannot pay court for {self._username}')
+            message = f'Court successfully paid for {self._username}'
+            p.produce(f'{topic_prefix}default', message)
+            logger.log(logging.INFO, message)
+        message = f'Cannot pay court for {self._username}'
+        p.produce(f'{topic_prefix}default', message)
+        logger.log(logging.ERROR, message)
         return response
 
     def book_court(self, *args, **kwargs):
