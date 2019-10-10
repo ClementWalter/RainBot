@@ -15,6 +15,7 @@ MINUTE = int(os.getenv('MINUTE', 0))
 SECOND = int(os.getenv('SECOND', 10))
 JITTER = int(os.getenv('JITTER', 0))
 
+
 if __name__ == '__main__':
     scheduler = BlockingScheduler()
     scheduler.add_job(booking_job, 'interval', hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER)

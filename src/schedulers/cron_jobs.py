@@ -4,6 +4,7 @@ from inflection import underscore
 from src.booking_service import BookingService
 from src.spreadsheet import DriveClient
 from src.utils import date_of_next_day
+from src.producers import p, topic
 
 DAYS_OF_WEEK = dict(zip(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], range(7)))
 DAYS_FRENCH_TO_ENGLISH = {
@@ -39,6 +40,7 @@ def booking_job():
         response = booking_service.find_courts(**row.drop(['username', 'password']))
         courts = booking_service.parse_courts(response)
         if not courts:
+            p.produce(topic, f'No court available for {row.username} playing on {row.match_day}')
             logger.log(logging.WARNING, f'No court available for {row.username} playing on {row.match_day}')
         else:
             booking_service.login(row.username, row.password)
