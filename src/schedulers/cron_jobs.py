@@ -23,6 +23,7 @@ def booking_job():
     booking_service = BookingService()
     booking_references = (
         DriveClient().get_sheet_as_dataframe('RainBot')
+        .dropna()
         .rename(columns=underscore)
         .rename(columns={'courts': 'places'})
         .assign(
