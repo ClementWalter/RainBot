@@ -28,6 +28,7 @@ def booking_job():
         drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
         .replace({'in_out': {'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}})
+        .assign(password=lambda df: df[['username', 'password']].groupby('username').transform('max'))
         .replace({'': pd.np.NaN})
         .dropna()
         .loc[lambda df: df.active == 'TRUE']
