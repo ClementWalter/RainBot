@@ -14,6 +14,6 @@ class DriveClient:
         credentials = ServiceAccountCredentials.from_json_keyfile_dict(json_secret, scope)
         self.client = gspread.authorize(credentials)
 
-    def get_sheet_as_dataframe(self, spreadsheet_name):
-        sheet = self.client.open(spreadsheet_name).sheet1
+    def get_sheet_as_dataframe(self, sheet_index):
+        sheet = self.client.open('RainBot').get_worksheet(sheet_index)
         return pd.DataFrame(sheet.get_all_records())

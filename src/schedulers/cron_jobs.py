@@ -21,10 +21,13 @@ logger = logging.getLogger(__name__)
 
 def booking_job():
     booking_service = BookingService()
+    drive_client = DriveClient()
     booking_references = (
-        DriveClient().get_sheet_as_dataframe('RainBot')
+        drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
         .loc[lambda df: df.match_day != '']
+        .loc[lambda df: df.active == 'TRUE']
+        .drop('active', axis=1)
         .rename(columns={'courts': 'places'})
         .assign(
             match_day=lambda df: (
