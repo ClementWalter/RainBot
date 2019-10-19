@@ -27,7 +27,9 @@ def booking_job():
     booking_references = (
         drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
-        .loc[lambda df: df.match_day != '']
+        .replace({'in_out': {'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}})
+        .replace({'': pd.np.NaN})
+        .dropna()
         .loc[lambda df: df.active == 'TRUE']
         .drop('active', axis=1)
         .rename(columns={'courts': 'places'})
@@ -38,7 +40,7 @@ def booking_job():
                 .replace(DAYS_OF_WEEK)
                 .map(date_of_next_day)
             ),
-            in_out=lambda df: df.in_out.replace({'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}).str.split(','),
+            in_out=lambda df: df.in_out.str.split(','),
             places=lambda df: df.places.str.split(','),
         )
     )
