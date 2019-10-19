@@ -1,10 +1,12 @@
 import logging
+
+import pandas as pd
 from inflection import underscore
 
 from src.booking_service import BookingService
+from src.producers import p, topic_prefix
 from src.spreadsheet import DriveClient
 from src.utils import date_of_next_day
-from src.producers import p, topic_prefix
 
 DAYS_OF_WEEK = dict(zip(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], range(7)))
 DAYS_FRENCH_TO_ENGLISH = {
@@ -17,11 +19,11 @@ DAYS_FRENCH_TO_ENGLISH = {
     'dimanche': 'sun',
 }
 logger = logging.getLogger(__name__)
+booking_service = BookingService()
+drive_client = DriveClient()
 
 
 def booking_job():
-    booking_service = BookingService()
-    drive_client = DriveClient()
     booking_references = (
         drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
@@ -52,4 +54,8 @@ def booking_job():
             booking_service.book_court(**row.drop(['username', 'password']))
             booking_service.post_player()
             booking_service.pay()
+            drive_client.append_series_to_sheet(
+                sheet_index=2,
+                data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
+            )
             booking_service.logout()

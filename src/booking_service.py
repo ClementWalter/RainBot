@@ -17,6 +17,7 @@ class BookingService:
         self.session = requests.session()
         self._username = None
         self._is_booking = False
+        self.reservation = {}
 
     def find_courts(self, places, match_day, in_out, hour_from, hour_to):
         """
@@ -121,7 +122,7 @@ class BookingService:
             self._is_booking = False
             return
 
-        reservation_data = {
+        self.reservation = {
             'equipmentId': courts[0].attrs['equipmentid'],
             'courtId': courts[0].attrs['courtid'],
             'dateDeb': courts[0].attrs['datedeb'],
@@ -130,7 +131,7 @@ class BookingService:
         }
         return self.session.post(
             BOOKING_URL,
-            reservation_data,
+            self.reservation,
             params={'page': 'reservation', 'view': 'reservation_creneau'}
         )
 
@@ -153,3 +154,4 @@ class BookingService:
         self._username = None
         self.session = requests.session()
         self._is_booking = False
+        self.reservation = {}
