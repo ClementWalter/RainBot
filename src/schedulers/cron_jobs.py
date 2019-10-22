@@ -28,12 +28,15 @@ def booking_job():
         drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
         .replace({'in_out': {'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}})
-        .assign(password=lambda df: df[['username', 'password']].groupby('username').transform('max'))
+        .assign(
+            password=lambda df: df[['username', 'password']].groupby('username').transform('max'),
+            places=lambda df: df.filter(regex=r'court_\d').agg(lambda row: row[row != ''].to_list(), axis=1),
+            in_out=lambda df: df.in_out.str.split(','),
+        )
         .replace({'': pd.np.NaN})
-        .dropna()
+        .dropna(subset=['match_day', 'places'])
         .loc[lambda df: df.active == 'TRUE']
-        .drop('active', axis=1)
-        .rename(columns={'courts': 'places'})
+        .filter(regex=r'^(?!(court_\d|active)$)')
         .assign(
             match_day=lambda df: (
                 df.match_day.str.lower()
@@ -41,8 +44,6 @@ def booking_job():
                 .replace(DAYS_OF_WEEK)
                 .map(date_of_next_day)
             ),
-            in_out=lambda df: df.in_out.str.split(','),
-            places=lambda df: df.places.str.split(','),
         )
     )
     for _, row in booking_references.iterrows():
