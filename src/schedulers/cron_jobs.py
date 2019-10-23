@@ -20,10 +20,10 @@ DAYS_FRENCH_TO_ENGLISH = {
 }
 logger = logging.getLogger(__name__)
 booking_service = BookingService()
-drive_client = DriveClient()
 
 
 def booking_job():
+    drive_client = DriveClient()
     booking_references = (
         drive_client.get_sheet_as_dataframe(0)
         .rename(columns=underscore)
