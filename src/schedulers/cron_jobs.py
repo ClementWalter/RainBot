@@ -56,10 +56,11 @@ def booking_job():
         else:
             booking_service.login(row.username, row.password)
             booking_service.book_court(**row.drop(['username', 'password']))
+            if booking_service._is_booking:
+                drive_client.append_series_to_sheet(
+                    sheet_index=2,
+                    data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
+                )
             booking_service.post_player()
             booking_service.pay()
-            drive_client.append_series_to_sheet(
-                sheet_index=2,
-                data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
-            )
             booking_service.logout()
