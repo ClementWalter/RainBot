@@ -39,7 +39,7 @@ def booking_job():
         .filter(regex=r'^(?!(court_\d|active)$)')
         .assign(
             match_day=lambda df: (
-                df.match_day.str.lower()
+                df.match_day.str.lower().str.strip()
                 .replace(DAYS_FRENCH_TO_ENGLISH)
                 .replace(DAYS_OF_WEEK)
                 .map(date_of_next_day)
