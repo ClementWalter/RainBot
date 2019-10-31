@@ -70,7 +70,7 @@ class BookingService:
 
     def login(self, username, password):
         response = self.session.get(LOGIN_URL)
-        soup = BeautifulSoup(response.text, features='html5lib')
+        soup = self.soup(response)
         token_input = soup.find(id='form-login')
         route = token_input.attrs['action']
         login_data = {
@@ -155,3 +155,21 @@ class BookingService:
         self.session = requests.session()
         self._is_booking = False
         self.reservation = {}
+
+    def get_reservation(self):
+        """
+        Fetch data from profile page
+        """
+        response = self.session.get(
+            BOOKING_URL,
+            params={'page': 'profil', 'view': 'ma_reservation'}
+        )
+        soup = self.soup(response)
+        if not soup.find('span', {'class': 'tennis-name'}):
+            return {}
+        return {
+            'username': self._username,
+            'tennis_name': soup.find('span', {'class': 'tennis-name'}).text,
+            'tennis_hours': soup.find('span', {'class': 'tennis-hours'}).text,
+            'tennis_court': soup.find('span', {'class': 'tennis-court'}).text,
+        }

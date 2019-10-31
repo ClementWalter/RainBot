@@ -64,3 +64,14 @@ def booking_job():
             booking_service.post_player()
             booking_service.pay()
             booking_service.logout()
+
+            # Update current tab
+            users = (
+                booking_references
+                .drop_duplicates(['username'])
+                [['username', 'password']]
+            )
+            for _, user in users.iterrows():
+                booking_service.login(user.username, user.password)
+                drive_client.append_series_to_sheet(5, pd.Series(booking_service.get_reservation()))
+                booking_service.logout()
