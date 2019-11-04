@@ -71,6 +71,7 @@ def booking_job():
                 .drop_duplicates(['username'])
                 [['username', 'password']]
             )
+            drive_client.clear_sheet(5)
             for _, user in users.iterrows():
                 booking_service.login(user.username, user.password)
                 drive_client.append_series_to_sheet(5, pd.Series(booking_service.get_reservation()))

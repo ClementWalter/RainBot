@@ -44,3 +44,7 @@ class DriveClient:
         self.worksheets[sheet_index].append_row(
             data.reindex(self.headers[sheet_index]).fillna('').to_list()
         )
+
+    def clear_sheet(self, sheet_index):
+        self.worksheets[sheet_index].clear()
+        self.worksheets[sheet_index].append_row(self.headers[sheet_index])
