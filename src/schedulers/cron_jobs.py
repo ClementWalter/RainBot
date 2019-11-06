@@ -52,7 +52,7 @@ def booking_job():
         if not courts:
             message = f'No court available for {row.username} playing on {row.match_day}'
             p.produce(f'{topic_prefix}default', message)
-            logger.log(logging.WARNING, message)
+            logger.log(logging.INFO, message)
         else:
             booking_service.login(row.username, row.password)
             booking_service.book_court(**row.drop(['username', 'password']))
