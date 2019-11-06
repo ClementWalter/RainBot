@@ -1,6 +1,8 @@
 import logging
 import os
+import re
 
+import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 
@@ -167,9 +169,13 @@ class BookingService:
         soup = self.soup(response)
         if not soup.find('span', {'class': 'tennis-name'}):
             return {}
+        tennis_date, tennis_hours = soup.find('span', {'class': 'tennis-hours'}).text.split(' - ')
+        hour_from, _ = re.findall(r'\d+', tennis_hours)
         return {
             'username': self._username,
             'tennis_name': soup.find('span', {'class': 'tennis-name'}).text,
-            'tennis_hours': soup.find('span', {'class': 'tennis-hours'}).text,
+            'tennis_date': tennis_date,
+            'tennis_hours': tennis_hours,
+            'timestamp': pd.to_datetime(tennis_date).strftime('%Y%m%d') + hour_from,
             'tennis_court': soup.find('span', {'class': 'tennis-court'}).text,
         }
