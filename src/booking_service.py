@@ -63,7 +63,7 @@ class BookingService:
         courts = soup.findAll('button', {'class': 'buttonAllOk'})
         if not courts:
             message = f'No court available for {self._username}'
-            logger.log(logging.WARNING, message)
+            logger.log(logging.INFO, message)
             p.produce(f'{topic_prefix}default', message)
             return
 
