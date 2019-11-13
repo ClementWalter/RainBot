@@ -107,13 +107,15 @@ class BookingService:
             'nbTickets': '1',
         }
         response = self.session.post(BOOKING_URL, payment_data)
-        if response.status_code == 200:
-            message = f'Court successfully paid for {self._username}'
+        if response.status_code != 200:
+            message = f'Cannot pay court for {self._username}'
             p.produce(f'{topic_prefix}default', message)
-            logger.log(logging.INFO, message)
-        message = f'Cannot pay court for {self._username}'
+            logger.log(logging.ERROR, message)
+            return
+
+        message = f'Court successfully paid for {self._username}'
         p.produce(f'{topic_prefix}default', message)
-        logger.log(logging.ERROR, message)
+        logger.log(logging.INFO, message)
         return response
 
     def book_court(self, *args, **kwargs):
