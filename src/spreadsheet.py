@@ -21,15 +21,15 @@ class DriveClient:
     def login(self):
         self._client = gspread.authorize(self.credentials)
         self._worksheets = self._client.open('RainBot').worksheets()
-        self._headers = [
-            list(map(underscore, sheet.get_all_values()[0])) for sheet in self._worksheets
-        ]
+        self._headers = {
+            worksheet.title: list(map(underscore, worksheet.get_all_values()[0])) for worksheet in self._worksheets
+        }
 
     @property
     def worksheets(self):
         if self._client.auth.access_token_expired:
             self.login()
-        return self._worksheets
+        return {worksheet.title: worksheet for worksheet in self._worksheets}
 
     @property
     def headers(self):
@@ -37,14 +37,14 @@ class DriveClient:
             self.login()
         return self._headers
 
-    def get_sheet_as_dataframe(self, sheet_index):
-        return pd.DataFrame(self.worksheets[sheet_index].get_all_records())
+    def get_sheet_as_dataframe(self, sheet_title):
+        return pd.DataFrame(self.worksheets[sheet_title].get_all_records())
 
-    def append_series_to_sheet(self, sheet_index, data):
-        self.worksheets[sheet_index].append_row(
-            data.reindex(self.headers[sheet_index]).fillna('').to_list()
+    def append_series_to_sheet(self, sheet_title, data):
+        self.worksheets[sheet_title].append_row(
+            data.reindex(self.headers[sheet_title]).fillna('').to_list()
         )
 
-    def clear_sheet(self, sheet_index):
-        self.worksheets[sheet_index].clear()
-        self.worksheets[sheet_index].append_row(self.headers[sheet_index])
+    def clear_sheet(self, sheet_title):
+        self.worksheets[sheet_title].clear()
+        self.worksheets[sheet_title].append_row(self.headers[sheet_title])

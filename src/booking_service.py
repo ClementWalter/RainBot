@@ -181,3 +181,19 @@ class BookingService:
             'timestamp': pd.to_datetime(tennis_date).strftime('%Y%m%d') + hour_from,
             'tennis_court': soup.find('span', {'class': 'tennis-court'}).text,
         }
+
+    def get_reservations(self, users):
+        """
+        Fetch all reservations for users
+        Args:
+            users (pandas.DataFrame): with columns
+
+        Returns:
+
+        """
+        reservations = []
+        for _, user in users.iterrows():
+            self.login(user.username, user.password)
+            reservations += [self.get_reservation()]
+            self.logout()
+        return pd.DataFrame(reservations).dropna()

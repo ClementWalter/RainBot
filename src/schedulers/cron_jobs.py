@@ -25,7 +25,7 @@ drive_client = DriveClient()
 
 def booking_job():
     booking_references = (
-        drive_client.get_sheet_as_dataframe(0)
+        drive_client.get_sheet_as_dataframe('Requests')
         .rename(columns=underscore)
         .replace({'in_out': {'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}})
         .assign(
@@ -35,8 +35,7 @@ def booking_job():
         )
         .replace({'': pd.np.NaN})
         .dropna(subset=['match_day', 'places'])
-        .loc[lambda df: df.active == 'TRUE']
-        .filter(regex=r'^(?!(court_\d|active)$)')
+        .filter(regex=r'^(?!(court_\d)$)')
         .assign(
             match_day=lambda df: (
                 df.match_day.str.lower().str.strip()
@@ -46,7 +45,7 @@ def booking_job():
             ),
         )
     )
-    for _, row in booking_references.iterrows():
+    for _, row in booking_references.loc[lambda df: df.active == 'TRUE'].drop('active', axis=1).iterrows():
         response = booking_service.find_courts(**row.drop(['username', 'password']))
         courts = booking_service.parse_courts(response)
         if not courts:
@@ -60,19 +59,38 @@ def booking_job():
             response = booking_service.pay()
             if response is not None:
                 drive_client.append_series_to_sheet(
-                    sheet_index=2,
+                    sheet_title='Historique',
                     data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
                 )
             booking_service.logout()
+            update_job()
 
-            # Update current tab
-            users = (
-                booking_references
-                .drop_duplicates(['username'])
-                [['username', 'password']]
-            )
-            drive_client.clear_sheet(5)
-            for _, user in users.iterrows():
-                booking_service.login(user.username, user.password)
-                drive_client.append_series_to_sheet(5, pd.Series(booking_service.get_reservation()))
-                booking_service.logout()
+
+def update_job():
+    """
+    A job for updating the Current tab
+    """
+    update_requests = (
+        drive_client.get_sheet_as_dataframe('Update')
+        .loc[lambda df: df.request_update == 'TRUE']
+    )
+    if update_requests.empty:
+        return
+    users = (
+        drive_client.get_sheet_as_dataframe('Requests')
+        .rename(columns=underscore)
+        .assign(password=lambda df: df[['username', 'password']].groupby('username').transform('max'))
+        .drop_duplicates(['username'])
+        [['username', 'password']]
+    )
+    reservations = booking_service.get_reservations(users)
+    drive_client.clear_sheet(sheet_title='Current')
+    for _, reservation in reservations.iterrows():
+        drive_client.append_series_to_sheet(
+            sheet_title='Current',
+            data=reservation,
+        )
+    drive_client.clear_sheet(sheet_title='Update')
+    for _, update_request in update_requests.assign(request_update='FALSE').iterrows():
+        drive_client.append_series_to_sheet(sheet_title='Update', data=update_request)
+    logger.log(logging.INFO, 'Current tab updated')
