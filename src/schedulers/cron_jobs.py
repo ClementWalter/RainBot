@@ -7,6 +7,7 @@ from src.booking_service import BookingService
 from src.producers import p, topic_prefix
 from src.spreadsheet import DriveClient
 from src.utils import date_of_next_day
+from src.emails import EmailService
 
 DAYS_OF_WEEK = dict(zip(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'], range(7)))
 DAYS_FRENCH_TO_ENGLISH = {
@@ -20,6 +21,7 @@ DAYS_FRENCH_TO_ENGLISH = {
 }
 logger = logging.getLogger(__name__)
 booking_service = BookingService()
+email_service = EmailService()
 drive_client = DriveClient()
 
 
@@ -30,7 +32,7 @@ def booking_job():
         .replace({'in_out': {'Couvert': 'V', 'Découvert': 'F', '': 'V,F'}})
         .assign(
             password=lambda df: df[['username', 'password']].groupby('username').transform('max'),
-            places=lambda df: df.filter(regex=r'court_\d').agg(lambda row: row[row != ''].to_list(), axis=1),
+            places=lambda df: df.filter(regex=r'court_\d').agg(lambda r: r[r != ''].to_list(), axis=1),
             in_out=lambda df: df.in_out.str.split(','),
         )
         .replace({'': pd.np.NaN})
@@ -63,6 +65,12 @@ def booking_job():
                     data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
                 )
             booking_service.logout()
+            email_service.send_mail({
+                "email": row.username,
+                "subject": "Nouvelle réservation Rainbot !",
+                "message": row[["match_day", "hour_from", "hour_to"]].append(pd.Series(booking_service.reservation)).rename(
+                    underscore).to_json()
+            })
             update_job()
 
 
