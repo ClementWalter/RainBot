@@ -64,13 +64,13 @@ def booking_job():
                     sheet_title='Historique',
                     data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
                 )
+                email_service.send_mail({
+                    "email": row.username,
+                    "subject": "Nouvelle réservation Rainbot !",
+                    "message": row[["match_day", "hour_from", "hour_to"]].append(pd.Series(booking_service.reservation)).rename(
+                        underscore).to_json()
+                })
             booking_service.logout()
-            email_service.send_mail({
-                "email": row.username,
-                "subject": "Nouvelle réservation Rainbot !",
-                "message": row[["match_day", "hour_from", "hour_to"]].append(pd.Series(booking_service.reservation)).rename(
-                    underscore).to_json()
-            })
             update_job()
 
 
