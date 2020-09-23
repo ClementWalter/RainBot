@@ -70,6 +70,13 @@ def booking_job():
                     "message": row[["match_day", "hour_from", "hour_to"]].append(pd.Series(booking_service.reservation)).rename(
                         underscore).to_json()
                 })
+            else:
+                email_service.send_mail({
+                    "email": row.username,
+                    "subject": "Rainbot a besoin de vous !",
+                    "message": "Connectez-vous à votre compte Paris tennis pour faire le point sur le paiement"
+                })
+
             booking_service.logout()
             update_job()
 
