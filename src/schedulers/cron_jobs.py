@@ -64,19 +64,11 @@ def booking_job():
                     sheet_title='Historique',
                     data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
                 )
-                email_service.send_mail({
-                    "email": row.username,
-                    "subject": "Nouvelle réservation Rainbot !",
-                    "message": row[["match_day", "hour_from", "hour_to"]].append(pd.Series(booking_service.reservation)).rename(
-                        underscore).to_json()
-                })
-            else:
-                email_service.send_mail({
-                    "email": row.username,
-                    "subject": "Rainbot a besoin de vous !",
-                    "message": "Connectez-vous à votre compte Paris tennis pour faire le point sur le paiement"
-                })
-
+            email_service.send_mail({
+                "email": row.username,
+                "subject": "Nouvelle réservation Rainbot !",
+                "message": response.text
+            })
             booking_service.logout()
             update_job()
 

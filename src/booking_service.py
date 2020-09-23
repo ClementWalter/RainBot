@@ -98,7 +98,7 @@ class BookingService:
             )
             p.produce(f'{topic_prefix}default', message)
             logger.log(logging.WARNING, message)
-            return
+            return response
 
         payment_data = {
             'page': 'reservation',
@@ -111,7 +111,7 @@ class BookingService:
             message = f'Cannot pay court for {self._username}'
             p.produce(f'{topic_prefix}default', message)
             logger.log(logging.ERROR, message)
-            return
+            return response
 
         message = f'Court successfully paid for {self._username}'
         p.produce(f'{topic_prefix}default', message)
