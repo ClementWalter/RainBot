@@ -74,14 +74,16 @@ class BookingService:
         response = self.session.get(LOGIN_URL)
         soup = self.soup(response)
         token_input = soup.find(id='form-login')
-        route = token_input.attrs['action']
-        login_data = {
-            'username': username,
-            'password': password,
-            'Submit': '',
-        }
+        if token_input is not None:
+            route = token_input.attrs['action']
+            login_data = {
+                'username': username,
+                'password': password,
+                'Submit': '',
+            }
+            response = self.session.post(route, login_data)
         self._username = username
-        return self.session.post(route, login_data)
+        return response
 
     def pay(self):
         if not self._is_booking:
