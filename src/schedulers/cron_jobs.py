@@ -69,8 +69,8 @@ def booking_job():
                     "subject": "Nouvelle réservation Rainbot !",
                     "message": response.text
                 })
+                update_job()
             booking_service.logout()
-            update_job()
 
 
 def update_job():

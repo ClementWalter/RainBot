@@ -71,6 +71,7 @@ class BookingService:
         return courts
 
     def login(self, username, password):
+        self.logout()
         response = self.session.get(LOGIN_URL)
         soup = self.soup(response)
         token_input = soup.find(id='form-login')
