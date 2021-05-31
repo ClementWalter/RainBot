@@ -1,5 +1,5 @@
 __pycache__
 
-client_secret.json
 .env
 .idea/
+client-secret.json
