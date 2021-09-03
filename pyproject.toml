@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "rainbot"
+version = "0.1.0"
+description = ""
+authors = ["Clement Walter <clement0walter@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = ">=3.7.1, <3.11"
+pandas = "^1.3.2"
+requests = "^2.26.0"
+beautifulsoup4 = "^4.9.3"
+inflection = "^0.5.1"
+gspread = "^4.0.1"
+oauth2client = "^4.1.3"
+APScheduler = "^3.7.0"
+numpy = "^1.21.2"
+html5lib = "^1.1"
+
+[tool.poetry.dev-dependencies]
+black = "^21.8b0"
+ipython = "^7.27.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+
+[tool.black]
+line-length = 100
+target-version = ['py37']
+include = '\.pyi?$'
+exclude = '''
+(
+  /(
+    | \.git
+    | \.pytest_cache
+    | \.venv
+    | build
+    | dist
+    | libs
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+atomic = true
+include_trailing_comma = true
+use_parentheses = true
