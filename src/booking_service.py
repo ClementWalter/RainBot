@@ -50,6 +50,35 @@ class BookingService:
     def soup(response):
         return BeautifulSoup(response.text, features="html5lib")
 
+    @staticmethod
+    def get_tennis_list():
+        response = requests.get(
+            "https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens"
+        )
+        soup = BeautifulSoup(response.text, features="html5lib")
+        return set(tennis.text[7:] for tennis in soup.find_all("td", {"class": "tennis-nom"}))
+
+    @staticmethod
+    def get_court_info(court_name):
+        response = requests.post(
+            "https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&action=ajax_tennis_json",
+            {"nomSrtm": court_name},
+        )
+        return response.json()["properties"]["general"]
+
+    @staticmethod
+    def get_all_courts_info():
+        return (
+            pd.DataFrame(
+                [
+                    BookingService.get_court_info(court_name)
+                    for court_name in BookingService.get_tennis_list()
+                ]
+            )
+            .rename(columns=lambda name: name.replace("_", ""))
+            .sort_values("nomSrtm")
+        )
+
     def parse_courts(self, response):
         soup = self.soup(response)
         if not self._is_booking:
@@ -239,7 +268,10 @@ class BookingService:
         """
         reservations = []
         for _, user in users.iterrows():
-            self.login(user.username, user.password)
-            reservations += [self.get_reservation()]
-            self.logout()
+            try:
+                self.login(user.username, user.password)
+                reservations += [self.get_reservation()]
+                self.logout()
+            except KeyError:
+                logger.log(logging.WARNING, f"{user.username} cannot log in")
         return pd.DataFrame(reservations).dropna()

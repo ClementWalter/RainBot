@@ -11,4 +11,6 @@ def date_of_next_day(day_code):
 
     """
     today = datetime.date.today()
-    return (today + datetime.timedelta(days=(day_code - today.weekday() + 7) % 7)).strftime("%d/%m/%Y")
+    return (today + datetime.timedelta(days=(day_code - today.weekday() + 7) % 7)).strftime(
+        "%d/%m/%Y"
+    )

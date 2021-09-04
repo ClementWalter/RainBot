@@ -65,14 +65,18 @@ def booking_job():
             booking_service.post_player()
             response = booking_service.pay()
             if response is not None:
-                drive_client.append_series_to_sheet(
-                    sheet_title="Historique",
-                    data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
-                )
+                if "Mode de paiement" in response.text:
+                    subject = "Rainbot a besoin d'argent !"
+                else:
+                    subject = "Nouvelle réservation Rainbot !"
+                    drive_client.append_series_to_sheet(
+                        sheet_title="Historique",
+                        data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
+                    )
                 email_service.send_mail(
                     {
                         "email": row.username,
-                        "subject": "Nouvelle réservation Rainbot !",
+                        "subject": subject,
                         "message": response.text,
                     }
                 )
@@ -80,7 +84,7 @@ def booking_job():
             booking_service.logout()
 
 
-def update_job():
+def update_job(username=None):
     """
     A job for updating the Current tab
     """
@@ -90,12 +94,9 @@ def update_job():
     if update_requests.empty:
         return
     users = (
-        drive_client.get_sheet_as_dataframe("Requests")
+        drive_client.get_sheet_as_dataframe("Users")
         .rename(columns=underscore)
-        .assign(
-            password=lambda df: df[["username", "password"]].groupby("username").transform("max")
-        )
-        .drop_duplicates(["username"])[["username", "password"]]
+        .loc[lambda df: df.username.isin([username] if username is not None else df.username)]
         .loc[lambda df: df.username.str.len() > 0]
         .loc[lambda df: df.password.str.len() > 0]
     )
