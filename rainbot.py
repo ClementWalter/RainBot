@@ -24,7 +24,6 @@ if __name__ == "__main__":
     scheduler.add_job(
         booking_job, "interval", hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER
     )
-    scheduler.add_job(update_job, "interval", seconds=1)
     for second in range(0, 10, 2):
         scheduler.add_job(
             booking_job, "cron", hour=int(8 - offset // 3600), second=second, jitter=JITTER
