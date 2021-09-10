@@ -111,3 +111,34 @@ def update_job(username=None):
     for _, update_request in update_requests.assign(request_update="FALSE").iterrows():
         drive_client.append_series_to_sheet(sheet_title="Update", data=update_request)
     logger.log(logging.INFO, "Current tab updated")
+
+
+def send_remainder():
+    ongoing_bookings = (
+        drive_client.get_sheet_as_dataframe("Historique")
+        .rename(columns=underscore)
+        .astype({"date_deb": "datetime64"})
+        .loc[lambda df: df.date_deb >= pd.Timestamp.today()]
+        .loc[lambda df: df.date_deb < pd.Timestamp.today() + pd.Timedelta(days=1)]
+    )
+    message = f"""
+    Aujourd'hui c'est jour de match !
+
+    Penser à prendre sa raquette, de l'eau et des balles.
+    """
+    for _, row in ongoing_bookings.iterrows():
+        email_service.send_mail(
+            {
+                "email": row.username,
+                "subject": "Jour de match !",
+                "message": message,
+            }
+        )
+        if row["partenaire/id"] != "":
+            email_service.send_mail(
+                {
+                    "email": row["partenaire/id"],
+                    "subject": "Jour de match !",
+                    "message": message,
+                }
+            )
