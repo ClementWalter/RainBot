@@ -60,27 +60,33 @@ def booking_job():
             message = f"No court available for {row.username} playing on {row.match_day}"
             logger.log(logging.INFO, message)
         else:
-            booking_service.login(row.username, row.password)
-            booking_service.book_court(**row.drop(["username", "password"]))
-            booking_service.post_player()
-            response = booking_service.pay()
-            if response is not None:
-                if "Mode de paiement" in response.text:
-                    subject = "Rainbot a besoin d'argent !"
-                else:
-                    subject = "Nouvelle réservation Rainbot !"
-                    drive_client.append_series_to_sheet(
-                        sheet_title="Historique",
-                        data=row.append(pd.Series(booking_service.reservation)).rename(underscore),
+            try:
+                booking_service.login(row.username, row.password)
+                booking_service.book_court(**row.drop(["username", "password"]))
+                booking_service.post_player()
+                response = booking_service.pay()
+                if response is not None:
+                    if "Mode de paiement" in response.text:
+                        subject = "Rainbot a besoin d'argent !"
+                    else:
+                        subject = "Nouvelle réservation Rainbot !"
+                        drive_client.append_series_to_sheet(
+                            sheet_title="Historique",
+                            data=row.append(pd.Series(booking_service.reservation)).rename(
+                                underscore
+                            ),
+                        )
+                    email_service.send_mail(
+                        {
+                            "email": row.username,
+                            "subject": subject,
+                            "message": response.text,
+                        }
                     )
-                email_service.send_mail(
-                    {
-                        "email": row.username,
-                        "subject": subject,
-                        "message": response.text,
-                    }
-                )
-                update_job()
+                    update_job()
+            except Exception as e:
+                logger.log(logging.ERROR, f"Raising error for {row}")
+                raise e
             booking_service.logout()
 
 
