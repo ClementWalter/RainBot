@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from src.schedulers.cron_jobs import booking_job, send_remainder, update_tabs
+from src.schedulers.cron_jobs import booking_job, cancel_job, send_remainder
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
@@ -23,6 +23,9 @@ if __name__ == "__main__":
     scheduler = BlockingScheduler()
     scheduler.add_job(
         booking_job, "interval", hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER
+    )
+    scheduler.add_job(
+        cancel_job, "interval", hours=HOUR, minutes=MINUTE, seconds=SECOND, jitter=JITTER
     )
     for second in range(0, 10, 2):
         scheduler.add_job(

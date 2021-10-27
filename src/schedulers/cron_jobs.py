@@ -120,6 +120,36 @@ def update_tabs(username=None):
     logger.log(logging.INFO, "Current tab updated")
 
 
+def cancel_job():
+    users = (
+        drive_client.get_sheet_as_dataframe("Users")
+        .rename(columns=underscore)
+        .loc[lambda df: df.annulation == "TRUE"]
+    )
+    for _, row in users.iterrows():
+        try:
+            booking_service.login(row.username, row.password)
+            response = booking_service.cancel()
+            if response is not None:
+                subject = "Réservation annulée !"
+                email_service.send_mail(
+                    {
+                        "email": row.username,
+                        "subject": subject,
+                        "message": response.text,
+                    }
+                )
+                drive_client.worksheets["Users"].update_cell(
+                    row.name + 2, drive_client.headers["Users"].index("annulation") + 1, "FALSE"
+                )
+
+        except Exception as e:
+            logger.log(logging.ERROR, f"Cannot cancel for {row}")
+            raise e
+        finally:
+            booking_service.logout()
+
+
 def send_remainder():
     ongoing_bookings = (
         drive_client.get_sheet_as_dataframe("Historique")

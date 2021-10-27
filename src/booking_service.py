@@ -275,3 +275,12 @@ class BookingService:
             except KeyError:
                 logger.log(logging.WARNING, f"{user.username} cannot log in")
         return pd.DataFrame(reservations).dropna()
+
+    def cancel(self):
+        response = self.request(
+            "post",
+            BOOKING_URL,
+            params={"page": "profil", "view": "ma_reservation"},
+            data={"annulation": "true"},
+        )
+        return response
