@@ -52,6 +52,7 @@ def booking_job():
         .loc[lambda df: df.active == "TRUE"]
         .drop("active", axis=1)
         .loc[lambda df: df.places.map(len) > 0]
+        .set_index("row_id")
     )
     for _, row in booking_references.iterrows():
         response = booking_service.find_courts(**row.drop(["username", "password"]))
@@ -72,9 +73,9 @@ def booking_job():
                         subject = "Nouvelle réservation Rainbot !"
                         drive_client.append_series_to_sheet(
                             sheet_title="Historique",
-                            data=row.append(pd.Series(booking_service.reservation)).rename(
-                                underscore
-                            ),
+                            data=row.append(
+                                pd.Series({"request_id": row.name, **booking_service.reservation})
+                            ).rename(underscore),
                         )
                     email_service.send_mail(
                         {
