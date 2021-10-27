@@ -84,14 +84,14 @@ def booking_job():
                             "message": response.text,
                         }
                     )
-                    update_job()
+                    update_tabs()
             except Exception as e:
                 logger.log(logging.ERROR, f"Raising error for {row}")
                 raise e
             booking_service.logout()
 
 
-def update_job(username=None):
+def update_tabs(username=None):
     """
     A job for updating the Current tab
     """

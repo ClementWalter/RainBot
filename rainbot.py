@@ -6,7 +6,7 @@ from datetime import datetime
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
 
-from src.schedulers.cron_jobs import booking_job, send_remainder, update_job
+from src.schedulers.cron_jobs import booking_job, send_remainder, update_tabs
 
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
