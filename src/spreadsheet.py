@@ -42,7 +42,8 @@ class DriveClient:
 
     def append_series_to_sheet(self, sheet_title, data):
         self.worksheets[sheet_title].append_row(
-            data.reindex(self.headers[sheet_title]).fillna("").to_list()
+            data.reindex(self.headers[sheet_title]).fillna("").to_list(),
+            insert_data_option="INSERT_ROWS",
         )
 
     def clear_sheet(self, sheet_title):
