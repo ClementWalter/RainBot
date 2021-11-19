@@ -44,6 +44,7 @@ class DriveClient:
         self.worksheets[sheet_title].append_row(
             data.reindex(self.headers[sheet_title]).fillna("").to_list(),
             insert_data_option="INSERT_ROWS",
+            table_range="A1",
         )
 
     def clear_sheet(self, sheet_title):
