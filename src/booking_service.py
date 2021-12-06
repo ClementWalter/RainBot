@@ -201,8 +201,19 @@ class BookingService:
         if not courts:
             self._is_booking = False
             return
+        self.select_court(courts)
+        if not self.reservation:
+            self._is_booking = False
+            return
+        response = self.session.post(
+            BOOKING_URL,
+            self.reservation,
+            params={"page": "reservation", "view": "reservation_creneau"},
+        )
+        return response
 
-        court = self.select_court(courts)
+    def select_court(self, courts):
+        court = courts[0]
         try:
             self.reservation = {
                 "equipmentId": court.attrs["equipmentid"],
@@ -215,16 +226,6 @@ class BookingService:
             logger.log(logging.ERROR, f"Selected court does not have attributes; {court}")
             self._is_booking = False
             return
-        response = self.session.post(
-            BOOKING_URL,
-            self.reservation,
-            params={"page": "reservation", "view": "reservation_creneau"},
-        )
-        return response
-
-    @staticmethod
-    def select_court(courts):
-        return courts[0]
 
     def post_player(self, first_name="Roger", last_name="Federer"):
         if not self._is_booking:
