@@ -48,6 +48,12 @@ def booking_job():
                 .replace(DAYS_OF_WEEK)
                 .map(date_of_next_day)
             ),
+            partenaire_first_name=lambda df: df["partenaire/full name"]
+            .str.split(" ", expand=True)[0]
+            .fillna("Roger"),
+            partenaire_last_name=lambda df: df["partenaire/full name"]
+            .str.split(" ", expand=True)[1]
+            .fillna("Federer"),
         )
         .loc[lambda df: df.active == "TRUE"]
         .drop("active", axis=1)
@@ -63,8 +69,10 @@ def booking_job():
         else:
             try:
                 booking_service.login(row.username, row.password)
-                booking_service.book_court(**row.drop(["username", "password"]))
-                booking_service.post_player()
+                booking_service.book_court(**row)
+                booking_service.post_player(
+                    first_name=row.partenaire_first_name, last_name=row.partenaire_last_name
+                )
                 response = booking_service.pay()
                 if response is not None:
                     if "Mode de paiement" in response.text:

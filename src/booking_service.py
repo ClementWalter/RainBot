@@ -21,7 +21,7 @@ class BookingService:
         self.reservation = {}
         self._query_data = {}
 
-    def find_courts(self, places, match_day, in_out, hour_from, hour_to):
+    def find_courts(self, places, match_day, in_out, hour_from, hour_to, *_, **__):
         """
         Args:
             places (list): places where to look spot in
