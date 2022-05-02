@@ -26,12 +26,18 @@ drive_client = DriveClient()
 
 
 def booking_job():
+    users = (
+        drive_client.get_sheet_as_dataframe("Users")
+        .rename(columns=underscore)
+        .loc[lambda df: df.password != ""][["username", "password"]]
+    )
     booking_references = (
         drive_client.get_sheet_as_dataframe("Requests")
         .rename(columns=underscore)
         .replace({"in_out": {"Couvert": "V", "Découvert": "F", "": "V,F"}})
+        .drop("password", axis=1)
+        .merge(users, on=["username"], how="inner")
         .assign(
-            password=lambda df: df[["username", "password"]].groupby("username").transform("max"),
             places=lambda df: df.filter(regex=r"court_\d").agg(
                 lambda r: r[r != ""].to_list(), axis=1
             ),
@@ -94,9 +100,9 @@ def booking_job():
                     )
                     update_tabs()
             except Exception as e:
-                logger.log(logging.ERROR, f"Raising error for {row}")
-                raise e
-            booking_service.logout()
+                logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+            finally:
+                booking_service.logout()
 
 
 def update_tabs(username=None):
