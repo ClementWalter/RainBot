@@ -10,15 +10,17 @@ class EmailService:
         self.contact_password = os.environ["PASSWORD"]
 
     def send_mail(self, data):
-        message = MIMEMultipart('alternative')
+        message = MIMEMultipart("alternative")
         message["From"] = self.contact_address
         message["To"] = data["email"]
         message["Subject"] = data.get("subject")
+        message["Cc"] = data.get("Cc")
         message.attach(MIMEText(data.get("message"), "plain"))
         message.attach(MIMEText(data.get("message"), "html"))
         session = smtplib.SMTP("mail.gandi.net", 587)
         session.starttls()
         session.login(self.contact_address, self.contact_password)
         text = message.as_string()
-        session.sendmail(self.contact_address, data["email"], text)
+        recipients = [data["email"]] + ([data["Cc"]] if data.get("Cc") else [])
+        session.sendmail(self.contact_address, recipients, text)
         session.quit()

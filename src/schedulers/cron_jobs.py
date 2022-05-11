@@ -101,6 +101,13 @@ def booking_job():
                     update_tabs()
             except Exception as e:
                 logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+                email_service.send_mail(
+                    {
+                        "email": row.username,
+                        "subject": "Erreur RainBot",
+                        "message": response.text,
+                    }
+                )
             finally:
                 booking_service.logout()
 
