@@ -6,10 +6,10 @@
 
 import json
 from itertools import chain
+
 import pandas as pd
 
 #%% Parse tennis list
-
 tennis = [t["properties"] for t in json.load(open("src/tennis.json"))["features"]]
 list(tennis[0].keys())
 

@@ -2,6 +2,7 @@ import logging
 
 import numpy as np
 import pandas as pd
+from dotenv import load_dotenv
 from inflection import underscore
 
 from src.booking_service import BookingService
@@ -9,6 +10,7 @@ from src.emails import EmailService
 from src.spreadsheet import DriveClient
 from src.utils import date_of_next_day
 
+load_dotenv()
 DAYS_OF_WEEK = dict(zip(["mon", "tue", "wed", "thu", "fri", "sat", "sun"], range(7)))
 DAYS_FRENCH_TO_ENGLISH = {
     "lundi": "mon",
@@ -35,7 +37,6 @@ def booking_job():
         drive_client.get_sheet_as_dataframe("Requests")
         .rename(columns=underscore)
         .replace({"in_out": {"Couvert": "V", "Découvert": "F", "": "V,F"}})
-        .drop("password", axis=1)
         .merge(users, on=["username"], how="inner")
         .assign(
             places=lambda df: df.filter(regex=r"court_\d").agg(

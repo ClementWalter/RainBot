@@ -13,8 +13,8 @@ class DriveClient:
         scope = ["https://www.googleapis.com/auth/drive"]
         self.credentials = ServiceAccountCredentials.from_json_keyfile_dict(json_secret, scope)
         self._client = None
-        self._worksheets = None
-        self._headers = None
+        self._worksheets = []
+        self._headers = {}
         self.login()
 
     def login(self):
@@ -37,7 +37,7 @@ class DriveClient:
             self.login()
         return self._headers
 
-    def get_sheet_as_dataframe(self, sheet_title):
+    def get_sheet_as_dataframe(self, sheet_title: str) -> pd.DataFrame:
         return pd.DataFrame(self.worksheets[sheet_title].get_all_records())
 
     def append_series_to_sheet(self, sheet_title, data):
