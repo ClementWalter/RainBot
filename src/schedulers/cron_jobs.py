@@ -1,3 +1,4 @@
+# type: ignore
 import logging
 
 import numpy as np
@@ -176,9 +177,11 @@ def send_remainder():
     ongoing_bookings = (
         drive_client.get_sheet_as_dataframe("Historique")
         .rename(columns=underscore)
-        .astype({"date_deb": "datetime64"})
-        .loc[lambda df: df.date_deb >= pd.Timestamp.today()]
-        .loc[lambda df: df.date_deb < pd.Timestamp.today() + pd.Timedelta(days=1)]
+        .loc[lambda df: df.date_deb != ""]
+        .assign(date_deb=lambda df: pd.to_datetime(df.date_deb, utc=True))
+        .dropna(subset=["date_deb"])
+        .loc[lambda df: df.date_deb >= pd.Timestamp.today(tz="utc")]
+        .loc[lambda df: df.date_deb < pd.Timestamp.today(tz="utc") + pd.Timedelta(days=1)]
     )
     message = f"""
     Aujourd'hui c'est jour de match !
