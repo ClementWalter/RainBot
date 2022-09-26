@@ -174,18 +174,31 @@ def cancel_job():
 
 
 def send_remainder():
+    courts = drive_client.get_sheet_as_dataframe("Courts").set_index("_airId")["_airNom"]
+    tennis = drive_client.get_sheet_as_dataframe("Tennis").set_index("id")["nomSrtm"]
     ongoing_bookings = (
         drive_client.get_sheet_as_dataframe("Historique")
         .rename(columns=underscore)
         .loc[lambda df: df.date_deb != ""]
-        .assign(date_deb=lambda df: pd.to_datetime(df.date_deb, utc=True))
+        .assign(
+            date_deb=lambda df: pd.to_datetime(df.date_deb, utc=True),
+            heure_deb=lambda df: df.date_deb.dt.hour,
+            court=lambda df: df.court_id.replace(courts),
+            equipment=lambda df: df.equipment_id.replace(tennis),
+        )
         .dropna(subset=["date_deb"])
         .loc[lambda df: df.date_deb >= pd.Timestamp.today(tz="utc")]
         .loc[lambda df: df.date_deb < pd.Timestamp.today(tz="utc") + pd.Timedelta(days=1)]
     )
-    message = f"""
+    message = """
     Aujourd'hui c'est jour de match !
-
+    <br/>
+    <br/>
+    Ça comment à <b>{heure_deb} heures</b>.
+    <br/>
+    Ça se passe à {equipment}, {court}
+    <br/>
+    <br/>
     Penser à prendre sa raquette, de l'eau et des balles.
     """
     for _, row in ongoing_bookings.iterrows():
@@ -193,7 +206,7 @@ def send_remainder():
             {
                 "email": row.username,
                 "subject": "Jour de match !",
-                "message": message,
+                "message": message.format(**row.to_dict()),
             }
         )
         if row["partenaire/id"] != "":
@@ -201,6 +214,6 @@ def send_remainder():
                 {
                     "email": row["partenaire/id"],
                     "subject": "Jour de match !",
-                    "message": message,
+                    "message": message.format(**row.to_dict()),
                 }
             )
