@@ -62,24 +62,26 @@ def booking_job():
             partenaire_last_name=lambda df: df["partenaire/full name"]
             .str.split(" ", expand=True)[1]
             .fillna("Federer"),
+            match_date=lambda df: pd.to_datetime(df.match_day, dayfirst=True),
         )
         .loc[lambda df: df.active == "TRUE"]
         .drop("active", axis=1)
         .loc[lambda df: df.places.map(len) > 0]
         .set_index("row_id")
+        .sort_values("match_date", ascending=False)
     )
-    for _, row in booking_references.iterrows():
-        response = booking_service.find_courts(**row.drop(["username", "password"]))
+    for row in booking_references.reset_index().to_dict("records"):
+        response = booking_service.find_courts(**row)
         courts = booking_service.parse_courts(response)
         if not courts:
-            message = f"No court available for {row.username} playing on {row.match_day}"
+            message = f"No court available for {row['username']} playing on {row['match_day']}"
             logger.log(logging.INFO, message)
         else:
             try:
-                booking_service.login(row.username, row.password)
+                booking_service.login(row["username"], row["password"])
                 booking_service.book_court(**row)
                 booking_service.post_player(
-                    first_name=row.partenaire_first_name, last_name=row.partenaire_last_name
+                    first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
                 )
                 response = booking_service.pay()
                 if response is not None:
@@ -89,13 +91,19 @@ def booking_job():
                         subject = "Nouvelle réservation Rainbot !"
                         drive_client.append_series_to_sheet(
                             sheet_title="Historique",
-                            data=row.append(
-                                pd.Series({"request_id": row.name, **booking_service.reservation})
-                            ).rename(underscore),
+                            data=(
+                                pd.Series(
+                                    {
+                                        **row,
+                                        "request_id": row["row_id"],
+                                        **booking_service.reservation,
+                                    }
+                                ).rename(underscore)
+                            ),
                         )
                     email_service.send_mail(
                         {
-                            "email": row.username,
+                            "email": row["username"],
                             "subject": subject,
                             "message": response.text,
                         }
@@ -105,7 +113,7 @@ def booking_job():
                 logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
                 email_service.send_mail(
                     {
-                        "email": row.username,
+                        "email": row["username"],
                         "subject": "Erreur RainBot",
                         "message": response.text,
                     }

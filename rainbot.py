@@ -1,13 +1,18 @@
 # coding=UTF-8
+import http.client
 import logging
 import os
 from datetime import datetime
 
 import pytz
 from apscheduler.schedulers.blocking import BlockingScheduler
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from src.schedulers.cron_jobs import booking_job, cancel_job, send_remainder
 
+http.client._MAXHEADERS = 1000  # type: ignore
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
 
