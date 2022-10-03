@@ -202,7 +202,7 @@ def send_remainder():
     Aujourd'hui c'est jour de match !
     <br/>
     <br/>
-    Ça comment à <b>{heure_deb} heures</b>.
+    Ça commence à <b>{heure_deb} heures</b>.
     <br/>
     Ça se passe à {equipment}, {court}
     <br/>
