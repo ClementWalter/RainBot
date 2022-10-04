@@ -13,7 +13,7 @@ load_dotenv()
 from src.schedulers.cron_jobs import booking_job, cancel_job, send_remainder
 
 http.client._MAXHEADERS = 1000  # type: ignore
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
 
 # Cron info
