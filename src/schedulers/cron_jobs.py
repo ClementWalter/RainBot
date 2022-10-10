@@ -63,8 +63,9 @@ def booking_job():
             .str.split(" ", expand=True)[1]
             .fillna("Federer"),
             match_date=lambda df: pd.to_datetime(df.match_day, dayfirst=True),
+            active=lambda df: df.active.replace({"TRUE": True, "FALSE": False}).astype("bool"),
         )
-        .loc[lambda df: df.active == "TRUE"]
+        .loc[lambda df: df.active]
         .drop("active", axis=1)
         .loc[lambda df: df.places.map(len) > 0]
         .set_index("row_id")
