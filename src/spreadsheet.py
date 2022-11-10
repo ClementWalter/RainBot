@@ -50,3 +50,8 @@ class DriveClient:
     def clear_sheet(self, sheet_title):
         self.worksheets[sheet_title].clear()
         self.worksheets[sheet_title].append_row(self.headers[sheet_title])
+
+    def set_sheet_from_dataframe(self, sheet_title: str, data: pd.DataFrame):
+        self.worksheets[sheet_title].update(
+            [data.columns.to_list(), *data.fillna("").values.tolist()]
+        )

@@ -1,8 +1,12 @@
-# type: ignore
+import json
 import logging
+import os
+from itertools import chain
 
 import numpy as np
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from inflection import underscore
 
@@ -226,3 +230,56 @@ def send_remainder():
                     "message": message.format(**row.to_dict()),
                 }
             )
+
+
+def update_data():
+    BOOKING_URL = os.environ["BOOKING_URL"]
+    response = requests.get(
+        BOOKING_URL, params={"page": "tennisParisien", "view": "les_tennis_parisiens"}
+    )
+    soup = BeautifulSoup(response.text, features="html5lib")
+    script = soup.find("div", {"class": "map-container"}).text.replace("\n", "").replace("\t", "")
+    start = script.find("var tennis = ")
+    stop = script.find("var markers =")
+    tennis = [
+        t["properties"]
+        for t in json.loads(script[start:stop].replace("var tennis = ", "").replace(";", ""))[
+            "features"
+        ]
+    ]
+
+    drive_client.set_sheet_from_dataframe(
+        "Tennis",
+        (
+            pd.DataFrame([t["general"] for t in tennis])
+            .rename(columns=lambda c: c[1:])
+            .assign(equCom=lambda df: df.equCom.str.replace(r"\n|\r", "", regex=True))
+            .drop_duplicates(subset=["nomSrtm"])
+        ),
+    )
+
+    drive_client.set_sheet_from_dataframe(
+        "Courts",
+        (
+            pd.DataFrame(
+                list(
+                    chain.from_iterable(
+                        [
+                            [
+                                {
+                                    **c,
+                                    "id": t["general"]["_id"],
+                                    "surface": c["_coating"]["_revLib"],
+                                }
+                                for c in t["courts"]
+                            ]
+                            for t in tennis
+                        ]
+                    )
+                )
+            )
+            .rename(columns={"_airCvt": "couvert", "_airEcl": "eclaire", "_airOuvRes": "ouvert"})
+            .filter(items=["_airId", "_airNom", "id", "surface", "eclaire", "ouvert", "couvert"])
+            .drop_duplicates(subset=["_airId"])
+        ),
+    )

@@ -10,7 +10,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.schedulers.cron_jobs import booking_job, cancel_job, send_remainder
+from src.schedulers.cron_jobs import (
+    booking_job,
+    cancel_job,
+    send_remainder,
+    update_data,
+)
 
 http.client._MAXHEADERS = 1000  # type: ignore
 logging.basicConfig(level=logging.INFO)
@@ -37,4 +42,5 @@ if __name__ == "__main__":
             booking_job, "cron", hour=int(8 - offset // 3600), second=second, jitter=JITTER
         )
     scheduler.add_job(send_remainder, "cron", hour=int(2 - offset // 3600))
+    scheduler.add_job(update_data, "cron", hour=0)
     scheduler.start()
