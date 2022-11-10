@@ -4,14 +4,28 @@
 # by searching var tennis = ...
 # in a tennis.json file
 
+#%% Imports
 import json
 from itertools import chain
 
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
 #%% Parse tennis list
-tennis = [t["properties"] for t in json.load(open("src/tennis.json"))["features"]]
-list(tennis[0].keys())
+response = requests.get(
+    "https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens"
+)
+soup = BeautifulSoup(response.text, features="html5lib")
+script = soup.find("div", {"class": "map-container"}).text.replace("\n", "").replace("\t", "")
+start = script.find("var tennis = ")
+stop = script.find("var markers =")
+tennis = [
+    t["properties"]
+    for t in json.loads(script[start:stop].replace("var tennis = ", "").replace(";", ""))[
+        "features"
+    ]
+]
 
 #%% Copy tennis to clipboard and paste to spreadsheet
 (
