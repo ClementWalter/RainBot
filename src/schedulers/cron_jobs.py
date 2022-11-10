@@ -1,7 +1,10 @@
 import json
 import logging
+import multiprocessing as mp
 import os
 from itertools import chain
+
+mp.set_start_method("fork")
 
 import numpy as np
 import pandas as pd
@@ -27,9 +30,61 @@ DAYS_FRENCH_TO_ENGLISH = {
     "dimanche": "sun",
 }
 logger = logging.getLogger(__name__)
-booking_service = BookingService()
 email_service = EmailService()
 drive_client = DriveClient()
+
+
+def book(row):
+    booking_service = BookingService()
+    response = booking_service.find_courts(**row)
+    courts = booking_service.parse_courts(response)
+    if not courts:
+        message = f"No court available for {row['username']} playing on {row['match_day']}"
+        logger.log(logging.INFO, message)
+    else:
+        try:
+            booking_service.login(row["username"], row["password"])
+            booking_service.book_court(**row)
+            booking_service.post_player(
+                first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
+            )
+            response = booking_service.pay()
+            if response is not None:
+                if "Mode de paiement" in response.text:
+                    subject = "Rainbot a besoin d'argent !"
+                else:
+                    subject = "Nouvelle réservation Rainbot !"
+                    drive_client.append_series_to_sheet(
+                        sheet_title="Historique",
+                        data=(
+                            pd.Series(
+                                {
+                                    **row,
+                                    "request_id": row["row_id"],
+                                    **booking_service.reservation,
+                                }
+                            ).rename(underscore)
+                        ),
+                    )
+                email_service.send_mail(
+                    {
+                        "email": row["username"],
+                        "subject": subject,
+                        "message": response.text,
+                    }
+                )
+                update_tabs()
+        except Exception as e:
+            logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+            email_service.send_mail(
+                {
+                    "email": row["username"],
+                    "subject": "Erreur RainBot",
+                    "message": response.text,
+                }
+            )
+        finally:
+            booking_service.logout()
 
 
 def booking_job():
@@ -75,56 +130,8 @@ def booking_job():
         .set_index("row_id")
         .sort_values("match_date", ascending=False)
     )
-    for row in booking_references.reset_index().to_dict("records"):
-        response = booking_service.find_courts(**row)
-        courts = booking_service.parse_courts(response)
-        if not courts:
-            message = f"No court available for {row['username']} playing on {row['match_day']}"
-            logger.log(logging.INFO, message)
-        else:
-            try:
-                booking_service.login(row["username"], row["password"])
-                booking_service.book_court(**row)
-                booking_service.post_player(
-                    first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
-                )
-                response = booking_service.pay()
-                if response is not None:
-                    if "Mode de paiement" in response.text:
-                        subject = "Rainbot a besoin d'argent !"
-                    else:
-                        subject = "Nouvelle réservation Rainbot !"
-                        drive_client.append_series_to_sheet(
-                            sheet_title="Historique",
-                            data=(
-                                pd.Series(
-                                    {
-                                        **row,
-                                        "request_id": row["row_id"],
-                                        **booking_service.reservation,
-                                    }
-                                ).rename(underscore)
-                            ),
-                        )
-                    email_service.send_mail(
-                        {
-                            "email": row["username"],
-                            "subject": subject,
-                            "message": response.text,
-                        }
-                    )
-                    update_tabs()
-            except Exception as e:
-                logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
-                email_service.send_mail(
-                    {
-                        "email": row["username"],
-                        "subject": "Erreur RainBot",
-                        "message": response.text,
-                    }
-                )
-            finally:
-                booking_service.logout()
+    with mp.Pool(processes=len(booking_references)) as pool:
+        pool.map(book, booking_references.reset_index().to_dict("records"))
 
 
 def update_tabs(username=None):
