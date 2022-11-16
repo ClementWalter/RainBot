@@ -1,1 +1,1 @@
-worker: python rainbot.py
+worker: python main.py
