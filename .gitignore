@@ -3,3 +3,4 @@ __pycache__
 .env
 .idea/
 client-secret.json
+rainbot.log

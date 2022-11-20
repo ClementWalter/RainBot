@@ -18,7 +18,12 @@ from src.schedulers.cron_jobs import (
 )
 
 http.client._MAXHEADERS = 1000  # type: ignore
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    filename="rainbot.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logging.getLogger("apscheduler").setLevel(logging.ERROR)
 
 # Cron info
@@ -29,6 +34,7 @@ JITTER = int(os.getenv("JITTER", 0))
 
 
 if __name__ == "__main__":
+    logging.info("Rainbot started")
     offset = pytz.timezone("Europe/Paris").utcoffset(datetime.now()).total_seconds()
     scheduler = BlockingScheduler()
     scheduler.add_job(
