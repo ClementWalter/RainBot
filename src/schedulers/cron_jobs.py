@@ -150,6 +150,7 @@ def update_tabs(username=None):
         .loc[lambda df: df.username.str.len() > 0]
         .loc[lambda df: df.password.str.len() > 0]
     )
+    booking_service = BookingService()
     reservations = booking_service.get_reservations(users)
     drive_client.clear_sheet(sheet_title="Current")
     for _, reservation in reservations.iterrows():
@@ -164,6 +165,7 @@ def update_tabs(username=None):
 
 
 def cancel_job():
+    booking_service = BookingService()
     users = (
         drive_client.get_sheet_as_dataframe("Users")
         .rename(columns=underscore)
