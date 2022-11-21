@@ -19,7 +19,6 @@ from src.schedulers.cron_jobs import (
 
 http.client._MAXHEADERS = 1000  # type: ignore
 logging.basicConfig(
-    filename="rainbot.log",
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(module)s - %(funcName)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
