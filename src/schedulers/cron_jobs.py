@@ -43,9 +43,9 @@ def book(row):
         logger.log(logging.INFO, message)
     else:
         try:
-            booking_service.login(row["username"], row["password"])
-            booking_service.book_court(**row)
-            booking_service.post_player(
+            response = booking_service.login(row["username"], row["password"])
+            response = booking_service.book_court(**row)
+            response = booking_service.post_player(
                 first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
             )
             response = booking_service.pay()
