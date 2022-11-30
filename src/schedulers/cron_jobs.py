@@ -41,50 +41,49 @@ def book(row):
     if not courts:
         message = f"No court available for {row['username']} playing on {row['match_day']}"
         logger.log(logging.INFO, message)
-    else:
-        try:
-            response = booking_service.login(row["username"], row["password"])
-            response = booking_service.book_court(**row)
-            response = booking_service.post_player(
-                first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
+        return
+    try:
+        subject = "Erreur Rainbot : login"
+        response = booking_service.login(row["username"], row["password"])
+        subject = "Erreur Rainbot : réservation"
+        response = booking_service.book_court(**row)
+        subject = "Erreur Rainbot : ajout partenaire"
+        response = booking_service.post_player(
+            first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
+        )
+        subject = "Erreur Rainbot : paiement"
+        response = booking_service.pay()
+        # None response means that booking could not proceed but no errors
+        if response is None:
+            return
+        if "Mode de paiement" in response.text:
+            subject = "Rainbot a besoin d'argent !"
+        else:
+            subject = "Nouvelle réservation Rainbot !"
+            drive_client.append_series_to_sheet(
+                sheet_title="Historique",
+                data=(
+                    pd.Series(
+                        {
+                            **row,
+                            "request_id": row["row_id"],
+                            **booking_service.reservation,
+                        }
+                    ).rename(underscore)
+                ),
             )
-            response = booking_service.pay()
-            if response is not None:
-                if "Mode de paiement" in response.text:
-                    subject = "Rainbot a besoin d'argent !"
-                else:
-                    subject = "Nouvelle réservation Rainbot !"
-                    drive_client.append_series_to_sheet(
-                        sheet_title="Historique",
-                        data=(
-                            pd.Series(
-                                {
-                                    **row,
-                                    "request_id": row["row_id"],
-                                    **booking_service.reservation,
-                                }
-                            ).rename(underscore)
-                        ),
-                    )
-                email_service.send_mail(
-                    {
-                        "email": row["username"],
-                        "subject": subject,
-                        "message": response.text,
-                    }
-                )
-                update_tabs()
-        except Exception as e:
-            logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
-            email_service.send_mail(
-                {
-                    "email": row["username"],
-                    "subject": "Erreur RainBot",
-                    "message": response.text,
-                }
-            )
-        finally:
-            booking_service.logout()
+        update_tabs()
+    except Exception as e:
+        logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+    finally:
+        email_service.send_mail(
+            {
+                "email": row["username"],
+                "subject": subject,
+                "message": getattr(response, "text") if hasattr(response, "text") else "",
+            }
+        )
+        booking_service.logout()
 
 
 def booking_job():
