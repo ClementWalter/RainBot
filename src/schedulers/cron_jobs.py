@@ -264,6 +264,7 @@ def update_data():
             .rename(columns=lambda c: c[1:])
             .assign(equCom=lambda df: df.equCom.str.replace(r"\n|\r", "", regex=True))
             .drop_duplicates(subset=["nomSrtm"])
+            .assign(gps=lambda df: df.gpsLat.astype(str) + "," + df.gpsLon.astype(str))
         ),
     )
 
