@@ -55,6 +55,7 @@ def book(row):
         response = booking_service.pay()
         # None response means that booking could not proceed but no errors
         if response is None:
+            subject = None
             return
         if "Mode de paiement" in response.text:
             subject = "Rainbot a besoin d'argent !"
@@ -76,13 +77,14 @@ def book(row):
     except Exception as e:
         logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
     finally:
-        email_service.send_mail(
-            {
-                "email": row["username"],
-                "subject": subject,
-                "message": getattr(response, "text") if hasattr(response, "text") else "",
-            }
-        )
+        if subject is not None:
+            email_service.send_mail(
+                {
+                    "email": row["username"],
+                    "subject": subject,
+                    "message": getattr(response, "text") if hasattr(response, "text") else "",
+                }
+            )
         booking_service.logout()
 
 
