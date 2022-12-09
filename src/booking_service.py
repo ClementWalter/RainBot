@@ -3,14 +3,23 @@ import logging
 import os
 import re
 from collections import ChainMap
+from tempfile import NamedTemporaryFile
 from urllib.parse import parse_qs, urljoin, urlparse
 
 import pandas as pd
 import requests
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
+from twocaptcha import TwoCaptcha
 
+load_dotenv()
 BOOKING_URL = os.getenv("BOOKING_URL")
 LOGIN_URL = os.getenv("LOGIN_URL")
+AUTH_BASE_URL = os.getenv("AUTH_BASE_URL")
+ACCOUNT_BASE_URL = os.getenv("ACCOUNT_BASE_URL")
+CAPTCHA_URL = os.getenv("CAPTCHA_URL")
+CAPTCHA_API_KEY = os.getenv("CAPTCHA_API_KEY")
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,35 +59,6 @@ class BookingService:
     @staticmethod
     def soup(response):
         return BeautifulSoup(response.text, features="html5lib")
-
-    @staticmethod
-    def get_tennis_list():
-        response = requests.get(
-            "https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=tennisParisien&view=les_tennis_parisiens"
-        )
-        soup = BeautifulSoup(response.text, features="html5lib")
-        return set(tennis.text[7:] for tennis in soup.find_all("td", {"class": "tennis-nom"}))
-
-    @staticmethod
-    def get_court_info(court_name):
-        response = requests.post(
-            "https://tennis.paris.fr/tennis/jsp/site/Portal.jsp?page=recherche&action=ajax_tennis_json",
-            {"nomSrtm": court_name},
-        )
-        return response.json()["properties"]["general"]
-
-    @staticmethod
-    def get_all_courts_info():
-        return (
-            pd.DataFrame(
-                [
-                    BookingService.get_court_info(court_name)
-                    for court_name in BookingService.get_tennis_list()
-                ]
-            )
-            .rename(columns=lambda name: name.replace("_", ""))
-            .sort_values("nomSrtm")
-        )
 
     def parse_courts(self, response):
         soup = self.soup(response)
@@ -136,13 +116,12 @@ class BookingService:
                 "client_id": "moncompte_bandeau",
                 "nonce": self._query_data["nonce"][0],
                 "prompt": "none",
-                "redirect_uri": "https://v70-auth.paris.fr/banner/AccessCode.jsp",
-                # "_": "1630605304",
+                "redirect_uri": f"{AUTH_BASE_URL}/banner/AccessCode.jsp",
             },
         )
         self.request(
             "post",
-            "https://v70-auth.paris.fr/auth/realms/paris/protocol/openid-connect/token",
+            f"{AUTH_BASE_URL}/auth/realms/paris/protocol/openid-connect/token",
             params={
                 "code": self._query_data["code"][0],
                 "grant_type": "authorization_code",
@@ -151,14 +130,12 @@ class BookingService:
             },
         )
 
-        self.request(
-            "get", "https://v70-auth.paris.fr/auth/realms/paris/protocol/openid-connect/userinfo"
-        )
+        self.request("get", f"{AUTH_BASE_URL}/auth/realms/paris/protocol/openid-connect/userinfo")
 
         self.request(
             "post",
-            "https://moncompte.paris.fr/moncompte/rest/banner/api/1/validateSession",
-            params={"login": "clement0walter@gmail.com"},
+            f"{ACCOUNT_BASE_URL}/moncompte/rest/banner/api/1/validateSession",
+            params={"login": username},
         )
 
         self._username = username
@@ -173,7 +150,8 @@ class BookingService:
         )
         if self.soup(response).find("table", {"nbtickets": 10}):
             message = (
-                f"Insufficient credit to proceed with payment for {self._username}. Reservation on hold for 15 "
+                f"Insufficient credit to proceed with payment for {self._username}. "
+                "Reservation on hold for 15 "
                 f"minutes."
             )
             logger.log(logging.WARNING, message)
@@ -206,6 +184,32 @@ class BookingService:
         if not self.reservation:
             self._is_booking = False
             return
+
+        response = self.session.post(
+            BOOKING_URL,
+            self.reservation,
+            params={"page": "reservation", "view": "reservation_captcha"},
+        )
+        response = self.session.get(
+            BOOKING_URL,
+            params={"page": "reservation", "view": "return_reservation_captcha"},
+        )
+        solver = TwoCaptcha(CAPTCHA_API_KEY)
+        response = self.request("get", CAPTCHA_URL)
+        image_file = NamedTemporaryFile(suffix=".png", delete=False)
+        with open(image_file.name, "wb") as f:
+            f.write(response.content)
+        result = solver.normal(image_file.name)
+        response = self.request(
+            "post",
+            BOOKING_URL,
+            {
+                "j_captcha_response": result["code"],
+                "jcaptchahoneypot": "",
+                "submitControle": "submit",
+            },
+            params={"page": "reservation", "action": "reservation_captcha"},
+        )
         response = self.session.post(
             BOOKING_URL,
             self.reservation,
