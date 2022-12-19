@@ -14,7 +14,7 @@ from src.schedulers.cron_jobs import (
     booking_job,
     cancel_job,
     send_remainder,
-    update_data,
+    update_records,
 )
 
 http.client._MAXHEADERS = 1000  # type: ignore
@@ -47,5 +47,5 @@ if __name__ == "__main__":
             booking_job, "cron", hour=int(8 - offset // 3600), second=second, jitter=JITTER
         )
     scheduler.add_job(send_remainder, "cron", hour=int(2 - offset // 3600))
-    scheduler.add_job(update_data, "cron", hour=0)
+    scheduler.add_job(update_records, "cron", hour=0)
     scheduler.start()

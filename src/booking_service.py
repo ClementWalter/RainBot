@@ -263,14 +263,13 @@ class BookingService:
         if not soup.find("span", {"class": "tennis-name"}):
             return {}
         tennis_date, tennis_hours = soup.find("span", {"class": "tennis-hours"}).text.split(" - ")
-        hour_from, _ = re.findall(r"\d+", tennis_hours)
+        hour_from, hour_to = re.findall(r"\d+", tennis_hours)
         return {
             "username": self._username,
-            "tennis_name": soup.find("span", {"class": "tennis-name"}).text,
-            "tennis_date": tennis_date,
-            "tennis_hours": tennis_hours,
-            "timestamp": pd.to_datetime(tennis_date).strftime("%Y%m%d") + hour_from,
-            "tennis_court": soup.find("span", {"class": "tennis-court"}).text,
+            "date_deb": pd.to_datetime(tennis_date + f" {hour_from}:00"),
+            "date_fin": pd.to_datetime(tennis_date + f" {hour_to}:00"),
+            "tennis_name": soup.find("span", {"class": "tennis-name"}).text.replace("TENNIS ", ""),
+            "court_name": soup.find("span", {"class": "tennis-court"}).text,
         }
 
     def get_reservations(self, users):

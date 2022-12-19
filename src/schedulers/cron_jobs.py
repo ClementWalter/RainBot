@@ -3,6 +3,7 @@ import json
 import logging
 import multiprocessing as mp
 import os
+from functools import partial
 from itertools import chain
 
 mp.set_start_method("fork")
@@ -12,7 +13,7 @@ import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from inflection import underscore
+from inflection import camelize, underscore
 
 from src.booking_service import BookingService
 from src.emails import EmailService
@@ -74,7 +75,6 @@ def book(row):
                     ).rename(underscore)
                 ),
             )
-        update_tabs()
     except Exception as e:
         logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
     finally:
@@ -137,34 +137,58 @@ def booking_job():
         pool.map(book, booking_references.reset_index().to_dict("records"))
 
 
-def update_tabs(username=None):
+def update_records():
     """
-    A job for updating the Current tab
+    A job for updating the forthcoming records
     """
-    update_requests = drive_client.get_sheet_as_dataframe("Update").loc[
-        lambda df: df.request_update == "TRUE"
-    ]
-    if update_requests.empty:
-        return
     users = (
         drive_client.get_sheet_as_dataframe("Users")
         .rename(columns=underscore)
-        .loc[lambda df: df.username.isin([username] if username is not None else df.username)]
         .loc[lambda df: df.username.str.len() > 0]
         .loc[lambda df: df.password.str.len() > 0]
     )
     booking_service = BookingService()
     reservations = booking_service.get_reservations(users)
-    drive_client.clear_sheet(sheet_title="Current")
-    for _, reservation in reservations.iterrows():
-        drive_client.append_series_to_sheet(
-            sheet_title="Current",
-            data=reservation,
+    tennis = drive_client.get_sheet_as_dataframe("Tennis")[["nomSrtm", "id"]].rename(
+        columns={"nomSrtm": "tennis_name", "id": "equipment_id"}
+    )
+    courts = drive_client.get_sheet_as_dataframe("Courts")[["_airId", "_airNom", "id"]].rename(
+        columns={"_airId": "court_id", "_airNom": "court_name", "id": "equipment_id"}
+    )
+    records = drive_client.get_sheet_as_dataframe("Historique").astype(
+        {"dateDeb": "datetime64", "dateFin": "datetime64"}
+    )
+    current_records = (
+        reservations.assign(
+            court_name=lambda df: df.court_name.str.split(":", expand=True)[0].str.strip()
         )
-    drive_client.clear_sheet(sheet_title="Update")
-    for _, update_request in update_requests.assign(request_update="FALSE").iterrows():
-        drive_client.append_series_to_sheet(sheet_title="Update", data=update_request)
-    logger.log(logging.INFO, "Current tab updated")
+        .merge(tennis, how="left", on="tennis_name")
+        .merge(courts, how="left", on=["equipment_id", "court_name"])
+        .drop(["tennis_name", "court_name"], axis=1)
+        .rename(columns=partial(camelize, uppercase_first_letter=False))
+        .rename(columns={"username": "Username"})
+    )
+    drive_client.clear_sheet("Historique")
+    drive_client.set_sheet_from_dataframe(
+        "Historique",
+        pd.concat(
+            [
+                records.loc[lambda df: df.dateDeb < pd.Timestamp.now()],
+                (
+                    records.loc[lambda df: df.dateDeb > pd.Timestamp.now()]
+                    .merge(
+                        current_records,
+                        how="right",
+                        on=["Username", "dateDeb", "dateFin", "equipmentId", "courtId"],
+                    )
+                    .fillna("")
+                ),
+            ]
+        )
+        .sort_values("dateDeb")
+        .astype({"dateDeb": str, "dateFin": str}),
+    )
+    logger.log(logging.INFO, "Forthcoming records updated")
 
 
 def cancel_job():
