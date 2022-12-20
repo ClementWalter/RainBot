@@ -77,6 +77,7 @@ def book(row):
             )
     except Exception as e:
         logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+        subject = f"{subject} : {e}"
     finally:
         if subject is not None:
             email_service.send_mail(
