@@ -76,7 +76,9 @@ def book(row):
                 ),
             )
     except Exception as e:
-        logger.log(logging.ERROR, f"Raising error {e} for\n{row}")
+        info = row.copy()
+        del info["password"]
+        logger.log(logging.ERROR, f"Raising error {e} for\n{json.dumps(info, indent=4)}")
         subject = f"{subject} : {e}"
     finally:
         if subject is not None:
