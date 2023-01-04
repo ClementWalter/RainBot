@@ -99,6 +99,12 @@ def booking_job():
         .loc[lambda df: df.password != ""]
         .loc[lambda df: df["payé/montant"] != ""][["username", "password"]]
     )
+    places = (
+        drive_client.get_sheet_as_dataframe("Tennis")
+        .rename(columns={"nomSrtm": "name"})
+        .set_index("name")
+        .id
+    )
     booking_references = (
         drive_client.get_sheet_as_dataframe("Requests")
         .rename(columns=underscore)
@@ -108,6 +114,7 @@ def booking_job():
             places=lambda df: df.filter(regex=r"court_\d").agg(
                 lambda r: r[r != ""].to_list(), axis=1
             ),
+            places_id=lambda df: df.places.map(lambda _places: [places.get(_p) for _p in _places]),
             in_out=lambda df: df.in_out.str.split(","),
         )
         .replace({"": np.NaN})

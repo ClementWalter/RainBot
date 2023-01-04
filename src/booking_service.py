@@ -1,4 +1,5 @@
 # type: ignore
+import json
 import logging
 import os
 import re
@@ -180,7 +181,7 @@ class BookingService:
         if not courts:
             self._is_booking = False
             return
-        self.select_court(courts)
+        self.select_court(courts, places_order=kwargs["places_id"])
         if not self.reservation:
             self._is_booking = False
             return
@@ -217,20 +218,34 @@ class BookingService:
         )
         return response
 
-    def select_court(self, courts):
-        court = courts[0]
-        try:
-            self.reservation = {
-                "equipmentId": court.attrs["equipmentid"],
-                "courtId": court.attrs["courtid"],
-                "dateDeb": court.attrs["datedeb"],
-                "dateFin": court.attrs["datefin"],
-                "annulation": False,
-            }
-        except AttributeError:
-            logger.log(logging.ERROR, f"Selected court does not have attributes; {court}")
+    def select_court(self, courts, places_order):
+        ordered_selection = (
+            pd.DataFrame([court.attrs for court in courts])
+            .filter(items=["equipmentid", "courtid", "datedeb", "datefin"])
+            .assign(
+                equipmentid=lambda df: pd.Categorical(
+                    df.equipmentid.astype(int), categories=places_order
+                )
+            )
+            .sort_values("equipmentid")
+            .dropna()
+            .to_dict("records")
+        )
+        if not ordered_selection:
+            logger.log(
+                logging.ERROR,
+                f"Selected courts does not have correct attributes",
+            )
             self._is_booking = False
             return
+        court = ordered_selection[0]
+        self.reservation = {
+            "equipmentId": court["equipmentid"],
+            "courtId": court["courtid"],
+            "dateDeb": court["datedeb"],
+            "dateFin": court["datefin"],
+            "annulation": False,
+        }
 
     def post_player(self, first_name="Roger", last_name="Federer"):
         if not self._is_booking:
