@@ -185,6 +185,8 @@ def update_records():
                         on=["Username", "dateDeb", "dateFin", "equipmentId", "courtId"],
                     )
                     .fillna("")
+                    .iloc[:, 1:]
+                    .drop_duplicates()
                 ),
             ]
         )
