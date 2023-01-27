@@ -1,8 +1,8 @@
 # type: ignore
-import json
 import logging
 import os
 import re
+import time
 from collections import ChainMap
 from tempfile import NamedTemporaryFile
 from urllib.parse import parse_qs, urljoin, urlparse
@@ -165,6 +165,9 @@ class BookingService:
             "nbTickets": "1",
         }
         response = self.session.post(BOOKING_URL, payment_data)
+        if response.status_code != 200:
+            time.sleep(2)
+            response = self.session.post(BOOKING_URL, payment_data)
         if response.status_code != 200:
             message = f"Cannot pay court for {self._username}"
             logger.log(logging.ERROR, message)
