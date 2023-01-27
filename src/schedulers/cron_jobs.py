@@ -200,7 +200,11 @@ def update_records():
         .sort_values("dateDeb")
         .astype({"dateDeb": str, "dateFin": str}),
     )
-    logger.log(logging.INFO, "Forthcoming records updated")
+
+    logger.log(
+        logging.INFO,
+        f"Forthcoming records updated:{json.dumps(current_records.astype(str).to_dict('records'), indent=2)}",
+    )
 
 
 def cancel_job():
