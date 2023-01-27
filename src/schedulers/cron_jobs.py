@@ -78,7 +78,7 @@ def book(row):
                 ),
             )
     except Exception as e:
-        info = row.copy()
+        info = pd.Series(row.copy()).astype(str).to_dict()
         del info["password"]
         logger.log(logging.ERROR, f"Raising error {e} for\n{json.dumps(info, indent=4)}")
         subject = f"{subject} : {e}"
