@@ -59,7 +59,9 @@ def book(row):
         if response is None:
             subject = None
             return
-        if "Mode de paiement" in response.text:
+        if response.status_code != 200:
+            subject = "Erreur Rainbot"
+        elif "Mode de paiement" in response.text:
             subject = "Rainbot a besoin d'argent !"
         else:
             subject = "Nouvelle réservation Rainbot !"
