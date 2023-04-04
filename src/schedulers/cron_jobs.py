@@ -3,6 +3,7 @@ import json
 import logging
 import multiprocessing as mp
 import os
+from datetime import datetime
 from functools import partial
 from itertools import chain
 
@@ -140,6 +141,7 @@ def booking_job():
             active=lambda df: df.active.replace({"TRUE": True, "FALSE": False}).astype("bool"),
         )
         .loc[lambda df: df.active]
+        .loc[lambda df: df.match_date > datetime.now()]
         .drop("active", axis=1)
         .loc[lambda df: df.places.map(len) > 0]
         .set_index("row_id")
