@@ -97,8 +97,7 @@ def book(row):
 
 def booking_job():
     users = (
-        drive_client.get_sheet_as_dataframe("Users")
-        .rename(columns=underscore)
+        drive_client.users.rename(columns=underscore)
         .loc[lambda df: df.password != ""]
         .loc[lambda df: df["payé/montant"] != ""][["username", "password"]]
     )

@@ -20,10 +20,15 @@ class DriveClient:
     def login(self):
         self._client = gspread.authorize(self.credentials)
         self._worksheets = self._client.open("RainBot").worksheets()
+        self._users = self._client.open("RainBotUsers").worksheet("Users")
         self._headers = {
             worksheet.title: list(map(underscore, worksheet.get_all_values()[0]))
             for worksheet in self._worksheets
         }
+
+    @property
+    def users(self):
+        return pd.DataFrame(self._users.get_all_records())
 
     @property
     def worksheets(self):
