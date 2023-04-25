@@ -155,8 +155,7 @@ def update_records():
     A job for updating the forthcoming records
     """
     users = (
-        drive_client.get_sheet_as_dataframe("Users")
-        .rename(columns=underscore)
+        drive_client.users.rename(columns=underscore)
         .loc[lambda df: df.username.str.len() > 0]
         .loc[lambda df: df.password.str.len() > 0]
     )
@@ -212,11 +211,7 @@ def update_records():
 
 def cancel_job():
     booking_service = BookingService()
-    users = (
-        drive_client.get_sheet_as_dataframe("Users")
-        .rename(columns=underscore)
-        .loc[lambda df: df.annulation == "TRUE"]
-    )
+    users = drive_client.users.rename(columns=underscore).loc[lambda df: df.annulation == "TRUE"]
     for _, row in users.iterrows():
         try:
             booking_service.login(row.username, row.password)
@@ -230,8 +225,10 @@ def cancel_job():
                         "message": response.text,
                     }
                 )
-                drive_client.worksheets["Users"].update_cell(
-                    row.name + 2, drive_client.headers["Users"].index("annulation") + 1, "FALSE"
+                drive_client._users.update_cell(
+                    row.name + 2,
+                    drive_client._users.get_values()[0].index("Annulation") + 1,
+                    "FALSE",
                 )
 
         except Exception as e:
