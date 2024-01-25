@@ -110,6 +110,7 @@ def booking_job():
     booking_references = (
         drive_client.get_sheet_as_dataframe("Requests")
         .rename(columns=underscore)
+        .assign(username=lambda df: df.username.str.lower())
         .replace({"in_out": {"Couvert": "V", "Découvert": "F", "": "V,F"}})
         .merge(users, on=["username"], how="inner")
         .assign(
