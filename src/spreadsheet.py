@@ -28,9 +28,7 @@ class DriveClient:
 
     @property
     def users(self):
-        return pd.DataFrame(self._users.get_all_records()).assign(
-            username=lambda df: df.username.str.lower()
-        )
+        return pd.DataFrame(self._users.get_all_records())
 
     @property
     def worksheets(self):
