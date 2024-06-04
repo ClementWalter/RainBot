@@ -254,6 +254,7 @@ class BookingService:
         if not self._is_booking:
             return
 
+        logger.log(logging.INFO, f"Booking with {first_name} {last_name}")
         player_data = {
             "player1": [first_name, last_name, ""],
             "counter": "",
