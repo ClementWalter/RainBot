@@ -4,7 +4,6 @@ import logging
 import multiprocessing as mp
 import os
 from datetime import datetime
-from functools import partial
 from itertools import chain
 
 mp.set_start_method("fork")
@@ -38,46 +37,30 @@ drive_client = DriveClient()
 
 
 def book(row):
+    message = f"Booking for {row['username']} playing on {row['match_day']}"
+    logger.log(logging.INFO, message)
     booking_service = BookingService()
-    response = booking_service.find_courts(**row)
-    courts = booking_service.parse_courts(response)
+    courts = booking_service.find_courts_without_login(**row)
     if not courts:
         message = f"No court available for {row['username']} playing on {row['match_day']}"
         logger.log(logging.INFO, message)
         return
     try:
-        subject = "Erreur Rainbot : login"
-        response = booking_service.login(row["username"], row["password"])
-        subject = "Erreur Rainbot : réservation"
+        logger.log(logging.INFO, f"Found court for {row['username']}, booking it")
         response = booking_service.book_court(**row)
-        subject = "Erreur Rainbot : ajout partenaire"
-        response = booking_service.post_player(
-            first_name=row["partenaire_first_name"], last_name=row["partenaire_last_name"]
+        subject = "Nouvelle réservation Rainbot !"
+        drive_client.append_series_to_sheet(
+            sheet_title="Historique",
+            data=(
+                pd.Series(
+                    {
+                        **row,
+                        "request_id": row["row_id"],
+                        **booking_service.reservation,
+                    }
+                ).rename(underscore)
+            ),
         )
-        subject = "Erreur Rainbot : paiement"
-        response = booking_service.pay()
-        # None response means that booking could not proceed but no errors
-        if response is None:
-            subject = None
-            return
-        if response.status_code != 200:
-            subject = "Erreur Rainbot"
-        elif "Mode de paiement" in response.text:
-            subject = "Rainbot a besoin d'argent !"
-        else:
-            subject = "Nouvelle réservation Rainbot !"
-            drive_client.append_series_to_sheet(
-                sheet_title="Historique",
-                data=(
-                    pd.Series(
-                        {
-                            **row,
-                            "request_id": row["row_id"],
-                            **booking_service.reservation,
-                        }
-                    ).rename(underscore)
-                ),
-            )
     except Exception as e:
         info = pd.Series(row.copy()).astype(str).to_dict()
         del info["password"]
@@ -152,94 +135,6 @@ def booking_job():
         pool.map(book, booking_references.reset_index().to_dict("records"))
 
 
-def update_records():
-    """
-    A job for updating the forthcoming records
-    """
-    users = (
-        drive_client.users.rename(columns=underscore)
-        .loc[lambda df: df.username.str.len() > 0]
-        .loc[lambda df: df.password.str.len() > 0]
-    )
-    booking_service = BookingService()
-    reservations = booking_service.get_reservations(users)
-    tennis = drive_client.get_sheet_as_dataframe("Tennis")[["nomSrtm", "id"]].rename(
-        columns={"nomSrtm": "tennis_name", "id": "equipment_id"}
-    )
-    courts = drive_client.get_sheet_as_dataframe("Courts")[["_airId", "_airNom", "id"]].rename(
-        columns={"_airId": "court_id", "_airNom": "court_name", "id": "equipment_id"}
-    )
-    records = drive_client.get_sheet_as_dataframe("Historique").astype(
-        {"dateDeb": "datetime64", "dateFin": "datetime64"}
-    )
-    current_records = (
-        reservations.assign(
-            court_name=lambda df: df.court_name.str.split(":", expand=True)[0].str.strip()
-        )
-        .merge(tennis, how="left", on="tennis_name")
-        .merge(courts, how="left", on=["equipment_id", "court_name"])
-        .drop(["tennis_name", "court_name"], axis=1)
-        .rename(columns=partial(camelize, uppercase_first_letter=False))
-        .rename(columns={"username": "Username"})
-    )
-    drive_client.clear_sheet("Historique")
-    drive_client.set_sheet_from_dataframe(
-        "Historique",
-        pd.concat(
-            [
-                records.loc[lambda df: df.dateDeb < pd.Timestamp.now()],
-                (
-                    records.loc[lambda df: df.dateDeb > pd.Timestamp.now()]
-                    .merge(
-                        current_records,
-                        how="right",
-                        on=["Username", "dateDeb", "dateFin", "equipmentId", "courtId"],
-                    )
-                    .fillna("")
-                    .iloc[:, 1:]
-                    .drop_duplicates()
-                ),
-            ]
-        )
-        .sort_values("dateDeb")
-        .astype({"dateDeb": str, "dateFin": str}),
-    )
-
-    logger.log(
-        logging.INFO,
-        f"Forthcoming records updated:{json.dumps(current_records.astype(str).to_dict('records'), indent=2)}",
-    )
-
-
-def cancel_job():
-    booking_service = BookingService()
-    users = drive_client.users.rename(columns=underscore).loc[lambda df: df.annulation == "TRUE"]
-    for _, row in users.iterrows():
-        try:
-            booking_service.login(row.username, row.password)
-            response = booking_service.cancel()
-            if response is not None:
-                subject = "Réservation annulée !"
-                email_service.send_mail(
-                    {
-                        "email": row.username,
-                        "subject": subject,
-                        "message": response.text,
-                    }
-                )
-                drive_client._users.update_cell(
-                    row.name + 2,
-                    drive_client._users.get_values()[0].index("Annulation") + 1,
-                    "FALSE",
-                )
-
-        except Exception as e:
-            logger.log(logging.ERROR, f"Cannot cancel for {row}")
-            raise e
-        finally:
-            booking_service.logout()
-
-
 def send_remainder():
     courts = drive_client.get_sheet_as_dataframe("Courts").set_index("_airId")["_airNom"]
     tennis = drive_client.get_sheet_as_dataframe("Tennis").set_index("id")["nomSrtm"]
@@ -289,7 +184,9 @@ def send_remainder():
 def update_data():
     BOOKING_URL = os.environ["BOOKING_URL"]
     response = requests.get(
-        BOOKING_URL, params={"page": "tennisParisien", "view": "les_tennis_parisiens"}
+        BOOKING_URL,
+        params={"page": "tennisParisien", "view": "les_tennis_parisiens"},
+        timeout=10,
     )
     soup = BeautifulSoup(response.text, features="html5lib")
     script = soup.find("div", {"class": "map-container"}).text.replace("\n", "").replace("\t", "")

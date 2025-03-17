@@ -4,3 +4,11 @@ __pycache__
 .idea/
 client-secret.json
 rainbot.log
+
+# Selenium related
+.wdm/
+chromedriver
+geckodriver
+*.png
+*.log.*
+tests/test_booking.py

@@ -1,38 +1,82 @@
-# type: ignore
 import logging
 import os
-import re
 import time
-from collections import ChainMap
+from datetime import datetime
 from tempfile import NamedTemporaryFile
-from urllib.parse import parse_qs, urljoin, urlparse
 
-import pandas as pd
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 from twocaptcha import TwoCaptcha
+from webdriver_manager.chrome import ChromeDriverManager
 
 load_dotenv()
-BOOKING_URL = os.getenv("BOOKING_URL")
-LOGIN_URL = os.getenv("LOGIN_URL")
-AUTH_BASE_URL = os.getenv("AUTH_BASE_URL")
-ACCOUNT_BASE_URL = os.getenv("ACCOUNT_BASE_URL")
-CAPTCHA_URL = os.getenv("CAPTCHA_URL")
-CAPTCHA_API_KEY = os.getenv("CAPTCHA_API_KEY")
+BOOKING_URL = os.environ["BOOKING_URL"]
+LOGIN_URL = os.environ["LOGIN_URL"]
+AUTH_BASE_URL = os.environ["AUTH_BASE_URL"]
+ACCOUNT_BASE_URL = os.environ["ACCOUNT_BASE_URL"]
+CAPTCHA_URL = os.environ["CAPTCHA_URL"]
+CAPTCHA_API_KEY = os.environ["CAPTCHA_API_KEY"]
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 logger = logging.getLogger(__name__)
 
 
 class BookingService:
     def __init__(self):
-        self.session = requests.session()
         self._username = None
         self._is_booking = False
         self.reservation = {}
         self._query_data = {}
+        self._setup_driver()
 
-    def find_courts(self, places, match_day, in_out, hour_from, hour_to, *_, **__):
+    def _setup_driver(self):
+        """Set up the Selenium WebDriver with appropriate options for visible operation."""
+        chrome_options = Options()
+        # Remove headless mode to make the browser visible
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument(
+            "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+        )
+
+        # For Heroku deployment
+        if os.environ.get("GOOGLE_CHROME_BIN"):
+            chrome_options.binary_location = os.environ["GOOGLE_CHROME_BIN"]
+
+        try:
+            if os.environ.get("CHROMEDRIVER_PATH"):
+                service = Service(os.environ["CHROMEDRIVER_PATH"])
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            else:
+                service = Service(ChromeDriverManager().install())
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+
+            # Set page load timeout
+            self.driver.set_page_load_timeout(30)
+
+            # Create a wait object for explicit waits
+            self.wait = WebDriverWait(self.driver, 10)
+
+        except Exception as e:
+            logger.error(f"Failed to initialize WebDriver: {str(e)}")
+            raise
+
+    def find_courts_without_login(self, places, match_day, in_out, hour_from, hour_to, *_, **__):
         """
         Args:
             places (list): places where to look spot in
@@ -49,392 +93,551 @@ class BookingService:
             "selInOut": in_out,
             "hourRange": f"{int(hour_from)}-{int(hour_to)}",
         }
-        request_object = self.session if self._is_booking else requests
-        response = request_object.post(
+        response = requests.post(
             BOOKING_URL,
             search_data,
             params={"page": "recherche", "action": "rechercher_creneau"},
+            timeout=10,
         )
-        return response
+        soup = BeautifulSoup(response.text, features="html5lib")
+        return [court.text[:2] for court in soup.find_all("h4", {"class": "panel-title"})]
 
-    @staticmethod
-    def soup(response):
-        return BeautifulSoup(response.text, features="html5lib")
+    def book_court(
+        self,
+        username,
+        password,
+        place,
+        match_day,
+        in_out,
+        hour_from,
+        hour_to,
+        partenaire_first_name,
+        partenaire_last_name,
+        *_,
+        **__,
+    ):
+        self.login(username, password)
+        self.driver.save_screenshot("after_login.png")
 
-    def parse_courts(self, response):
-        soup = self.soup(response)
-        if not self._is_booking:
-            return [court.text[:2] for court in soup.findAll("h4", {"class": "panel-title"})]
+        self.search_courts(place, match_day, in_out, hour_from, hour_to)
+        self.driver.save_screenshot("after_search.png")
 
-        if soup.find("button", {"class": "buttonHasReservation"}):
-            message = f"User {self._username} has already an active reservation"
-            logger.log(logging.WARNING, message)
-            return
-
-        courts = soup.findAll("button", {"class": "buttonAllOk"})
-        if not courts:
-            message = f"No court available for {self._username}"
-            logger.log(logging.INFO, message)
-            return
-
-        courts.sort(key=lambda court: court.attrs["datedeb"])
-        return courts
-
-    def request(self, method, *args, **kwargs):
-        response = self.session.__getattribute__(method)(*args, **kwargs)
-        self._query_data = {
-            **self._query_data,
-            **parse_qs(urlparse(response.url).query),
-            **ChainMap(*[parse_qs(urlparse(r.url).query) for r in response.history]),
-        }
-        return response
-
-    def login(self, username, password):
-        self.logout()
-        response = self.request("get", LOGIN_URL)
-        referer = response.url
-        soup = self.soup(response)
-        form = soup.find(id="form-login")
-        if form is None:
-            raise ValueError("Could not find route in form-login")
-
-        route = form.attrs["action"]
-        self._query_data.update(parse_qs(urlparse(route).query))
-        login_data = {
-            "username": username,
-            "password": password,
-            "Submit": "",
-        }
-
-        self.request("post", route, login_data, headers={"referer": referer})
-        self.request("get", BOOKING_URL, params={"page": "recherche", "view": "recherche_creneau"})
-        self.request(
-            "get",
-            urljoin(referer, urlparse(referer).path),
-            params={
-                "response_type": "code",
-                "scope": "openid",
-                "client_id": "moncompte_bandeau",
-                "nonce": self._query_data["nonce"][0],
-                "prompt": "none",
-                "redirect_uri": f"{AUTH_BASE_URL}/banner/AccessCode.jsp",
-            },
-        )
-        self.request(
-            "post",
-            f"{AUTH_BASE_URL}/auth/realms/paris/protocol/openid-connect/token",
-            params={
-                "code": self._query_data["code"][0],
-                "grant_type": "authorization_code",
-                "client_id": "moncompte_bandeau",
-                "redirect_uri": self._query_data["redirect_uri"][0],
-            },
+        # Wait for the booking button to be present
+        self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "button.buttonAllOk")),
+            message="Booking button not found within the expected time.",
         )
 
-        self.request("get", f"{AUTH_BASE_URL}/auth/realms/paris/protocol/openid-connect/userinfo")
+        booking_buttons = self.driver.find_elements(By.CSS_SELECTOR, "button.buttonAllOk")
+        if booking_buttons:
+            booking_buttons[0].click()
+            time.sleep(0.5)
+        else:
+            logger.error("No booking buttons found")
+            return None
 
-        self.request(
-            "post",
-            f"{ACCOUNT_BASE_URL}/moncompte/rest/banner/api/1/validateSession",
-            params={"login": username},
+        # Solve captcha
+        logger.info("Solving captcha")
+        try:
+            self.driver.save_screenshot("before_solving_captcha.png")
+            self.solve_captcha()
+            self.driver.save_screenshot("after_solving_captcha.png")
+        except Exception as e:
+            self.driver.save_screenshot("error_solving_captcha.png")
+            logger.error(f"Error solving captcha: {str(e)}")
+            raise
+        time.sleep(5)
+
+        # Fill player details
+        logger.info("Filling player details")
+        try:
+            self.driver.save_screenshot("before_filling_player_details.png")
+            self.fill_player_details(partenaire_first_name, partenaire_last_name, self._username)
+            self.driver.save_screenshot("after_filling_player_details.png")
+        except Exception as e:
+            self.driver.save_screenshot("error_filling_player_details.png")
+            logger.error(f"Error filling player details: {str(e)}")
+            raise
+
+        self.driver.save_screenshot("before_clicking_ticket_option.png")
+        ticket_option = self.driver.find_element(By.ID, "submitControle")
+        ticket_option.click()
+        self.driver.save_screenshot("after_clicking_ticket_option.png")
+
+        self.driver.save_screenshot("before_clicking_payment_option.png")
+        payment_option = self.driver.find_element(
+            By.CSS_SELECTOR,
+            "table.price-item.text-center.option[paymentmode='existingTicket'][nbtickets='1']",
         )
+        # Click the table to select the payment option
+        payment_option.click()
+        self.driver.save_screenshot("after_clicking_payment_option.png")
 
-        self._username = username
-        return response
+        # Submit payment
+        self.driver.save_screenshot("before_submitting_payment.png")
+        submit_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        submit_button.click()
+        self.driver.save_screenshot("after_submitting_payment.png")
 
-    def pay(self):
-        if not self._is_booking:
-            return
-
-        response = self.session.get(
-            BOOKING_URL, params={"page": "reservation", "view": "methode_paiement"}
-        )
-        if self.soup(response).find("table", {"nbtickets": 10}):
-            message = (
-                f"Insufficient credit to proceed with payment for {self._username}. "
-                "Reservation on hold for 15 "
-                f"minutes."
-            )
-            logger.log(logging.WARNING, message)
-            return response
-
-        payment_data = {
-            "page": "reservation",
-            "action": "selection_methode_paiement",
-            "paymentMode": "existingTicket",
-            "nbTickets": "1",
-        }
-        response = self.session.post(BOOKING_URL, payment_data)
-        if response.status_code != 200:
-            time.sleep(2)
-            response = self.session.post(BOOKING_URL, payment_data)
-        if response.status_code != 200:
-            message = f"Cannot pay court for {self._username}"
-            logger.log(logging.ERROR, message)
-            return response
+        # Wait for payment processing
+        self.wait.until(EC.url_contains("reservation"))
+        self.driver.save_screenshot("after_waiting_for_payment_processing.png")
 
         message = f"Court successfully paid for {self._username}"
         logger.log(logging.INFO, message)
-        return response
 
-    def book_court(self, *args, **kwargs):
-        self._is_booking = True
-        response = self.find_courts(*args, **kwargs)
-        courts = self.parse_courts(response)
-        if not courts:
-            self._is_booking = False
-            return
-        self.select_court(courts, places_order=kwargs["places_id"])
-        if not self.reservation:
-            self._is_booking = False
-            return
+    def login(self, username, password):
+        """Log in to the booking system."""
+        # Navigate to login page
+        logger.info(f"Navigating to login page: {LOGIN_URL}")
+        self.driver.get(LOGIN_URL)
 
-        response = self.session.post(
-            BOOKING_URL,
-            self.reservation,
-            params={"page": "reservation", "view": "reservation_captcha"},
-        )
-        response = self.session.get(
-            BOOKING_URL,
-            params={"page": "reservation", "view": "return_reservation_captcha"},
-        )
+        # Wait for login form to load
+        logger.info("Waiting for login form to load")
+        try:
+            self.wait.until(EC.presence_of_element_located((By.ID, "form-login")))
+            logger.info("Login form loaded successfully")
+        except TimeoutException:
+            logger.error("Login form not found and not already logged in")
+            raise
 
-        captcha_check_result = self.solve_captcha(response)
+        # Find the username and password fields
+        username_input = self.driver.find_element(By.NAME, "username")
+        password_input = self.driver.find_element(By.NAME, "password")
 
-        response = self.request(
-            "post",
-            BOOKING_URL,
-            {
-                "li-antibot-token": captcha_check_result["antibotToken"],
-                "li-antibot-token-code": "",
-                "submitControle": "submit",
-            },
-            params={"page": "reservation", "action": "reservation_captcha"},
-        )
-        response = self.session.post(
-            BOOKING_URL,
-            self.reservation,
-            params={"page": "reservation", "view": "reservation_creneau"},
-        )
-        return response
+        # Clear the username field and type the username
+        logger.info(f"Entering username: {username}")
+        username_input.clear()
+        username_input.send_keys(username)
 
-    def solve_captcha(self, response):
-        antibot_params = re.search(r"LI_ANTIBOT\.loadAntibot\(\[(.*?)\]", response.text, re.DOTALL)
-        if not antibot_params:
-            logger.error("Failed to extract LI_ANTIBOT parameters")
-            return None
+        # Clear the password field and type the password
+        logger.info("Entering password")
+        password_input.clear()
+        password_input.send_keys(password)
 
-        config_items = [item.strip().strip('"') for item in antibot_params.group(1).split(",")]
-        x_li_sp_key = config_items[3]
+        # Find the submit button
+        submit_button = self.driver.find_element(By.XPATH, "//button[@type='submit']")
+        logger.info("Found submit button")
 
-        captcha_transaction_url = (
-            "https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captchas/transaction"
-        )
-        headers = {
-            "accept": "*/*",
-            "accept-language": "en-US,en;q=0.9",
-            "dnt": "1",
-            "origin": "https://tennis.paris.fr",
-            "referer": "https://tennis.paris.fr/",
-            "sec-ch-ua": '"Not;A=Brand";v="24", "Chromium";v="128"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"macOS"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "x-li-js-version": "v4",
-            "x-li-sp-key": x_li_sp_key,
-        }
-        antibot_params = self.session.post(captcha_transaction_url, headers=headers).json()
+        # Click the submit button
+        logger.info("Clicking submit button")
+        submit_button.click()
+        logger.info("Clicked submit button")
 
-        captcha_headers = {
-            "accept": "*/*",
-            "accept-language": "en-US,en;q=0.9",
-            "content-type": "application/x-www-form-urlencoded",
-            "dnt": "1",
-            "origin": "https://tennis.paris.fr",
-            "referer": "https://tennis.paris.fr/",
-            "sec-ch-ua": '"Not;A=Brand";v="24", "Chromium";v="128"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"macOS"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "x-li-antibot-id": antibot_params["antibotId"],
-            "x-li-js-version": "v4",
-            "x-li-request-id": antibot_params["requestId"],
-            "x-li-sp-key": x_li_sp_key,
-        }
-        captcha_url = "https://captcha.liveidentity.com/captcha/public/frontend/api/v3/captchas"
-        captcha_response = self.session.post(
-            captcha_url, headers=captcha_headers, data={"type": "IMAGE", "locale": "FR"}
-        )
+    def solve_captcha(self):
+        self.driver.switch_to.default_content()
 
-        if captcha_response.status_code != 200:
-            logger.error(f"Failed to get captcha. Status code: {captcha_response.status_code}")
-            return None
-
-        captcha_data = captcha_response.json()
-        captcha_image_url = (
-            f"https://captcha.liveidentity.com/captcha{captcha_data['questions'][0]}"
-        )
-        captcha_image_headers = {
-            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-            "accept-language": "en-US,en;q=0.9",
-            "dnt": "1",
-            "referer": "https://tennis.paris.fr/",
-            "sec-ch-ua": '"Not;A=Brand";v="24", "Chromium";v="128"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"macOS"',
-            "sec-fetch-dest": "image",
-            "sec-fetch-mode": "no-cors",
-            "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-        }
-        captcha_image_response = self.session.get(captcha_image_url, headers=captcha_image_headers)
-
-        if captcha_image_response.status_code != 200:
-            logger.error(
-                f"Failed to get captcha image. Status code: {captcha_image_response.status_code}"
+        try:
+            WebDriverWait(self.driver, 5).until(
+                EC.frame_to_be_available_and_switch_to_it((By.ID, "li-antibot-iframe"))
             )
-            return None
+        except TimeoutException:
+            logger.error("Timeout waiting for captcha iframe")
+            raise
 
-        # Save the captcha image to a temporary file
+        time.sleep(1)
+        try:
+            captcha_div = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.ID, "li-antibot-questions-container"))
+            )
+        except TimeoutException:
+            self.driver.switch_to.default_content()
+            self.driver.switch_to.frame(self.driver.find_element(By.ID, "li-antibot-iframe"))
+            captcha_div = self.driver.find_element(By.ID, "li-antibot-questions-container")
+
         image_file = NamedTemporaryFile(suffix=".png", delete=False)
-        with open(image_file.name, "wb") as f:
-            f.write(captcha_image_response.content)
-
+        captcha_div.screenshot(image_file.name)
         solver = TwoCaptcha(CAPTCHA_API_KEY)
+        logger.info("Solving captcha")
         result = solver.normal(image_file.name)
+        logger.info(f"Captcha solved: {result['code']}")
+        captcha_input = self.driver.find_element(By.ID, "li-antibot-answer")
+        captcha_input.clear()
+        captcha_input.send_keys(result["code"])
+        validate_button = self.driver.find_element(By.ID, "li-antibot-validate")
+        validate_button.click()
 
-        captcha_check_headers = {
-            "accept": "*/*",
-            "accept-language": "en-US,en;q=0.9",
-            "content-type": "application/x-www-form-urlencoded",
-            "dnt": "1",
-            "origin": "https://tennis.paris.fr",
-            "referer": "https://tennis.paris.fr/",
-            "sec-ch-ua": '"Not;A=Brand";v="24", "Chromium";v="128"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"macOS"',
-            "sec-fetch-dest": "empty",
-            "sec-fetch-mode": "cors",
-            "sec-fetch-site": "cross-site",
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
-            "x-li-js-version": "v4",
-            "x-li-sp-key": x_li_sp_key,
-        }
-        captcha_check_url = (
-            f"https://captcha.liveidentity.com/captcha{captcha_data['captchaValidationUrl']}"
-        )
-        captcha_check_response = self.session.post(
-            captcha_check_url, headers=captcha_check_headers, data={"answer": result["code"]}
-        )
-
-        if captcha_check_response.status_code != 200:
-            logger.error(
-                f"Failed to check captcha. Status code: {captcha_check_response.status_code}"
-            )
-            return None
-
-        return captcha_check_response.json()
-
-    def select_court(self, courts, places_order):
-        ordered_selection = (
-            pd.DataFrame([court.attrs for court in courts])
-            .filter(items=["equipmentid", "courtid", "datedeb", "datefin"])
-            .assign(
-                equipmentid=lambda df: pd.Categorical(
-                    df.equipmentid.astype(int), categories=places_order
-                )
-            )
-            .sort_values("equipmentid")
-            .dropna()
-            .to_dict("records")
-        )
-        if not ordered_selection:
-            logger.log(
-                logging.ERROR,
-                f"Selected courts does not have correct attributes",
-            )
-            self._is_booking = False
-            return
-        court = ordered_selection[0]
-        self.reservation = {
-            "equipmentId": court["equipmentid"],
-            "courtId": court["courtid"],
-            "dateDeb": court["datedeb"],
-            "dateFin": court["datefin"],
-            "annulation": False,
-        }
-
-    def post_player(self, first_name="Roger", last_name="Federer"):
-        if not self._is_booking:
-            return
-
-        logger.log(logging.INFO, f"Booking with {first_name} {last_name}")
-        player_data = {
-            "player1": [first_name, last_name, ""],
-            "counter": "",
-            "submitControle": "submit",
-        }
-        return self.session.post(
-            BOOKING_URL, player_data, params={"page": "reservation", "action": "validation_court"}
-        )
+        self.driver.switch_to.default_content()
 
     def logout(self):
-        self._username = None
-        self.session = requests.session()
-        self._is_booking = False
-        self.reservation = {}
-        self._query_data = {}
+        self.driver.quit()
 
-    def get_reservation(self):
+    def fill_player_details(self, name, surname, email=None):
         """
-        Fetch data from profile page
-        """
-        response = self.session.get(
-            BOOKING_URL, params={"page": "profil", "view": "ma_reservation"}
-        )
-        soup = self.soup(response)
-        if not soup.find("span", {"class": "tennis-name"}):
-            return {}
-        tennis_date, tennis_hours = soup.find("span", {"class": "tennis-hours"}).text.split(" - ")
-        hour_from, hour_to = re.findall(r"\d+", tennis_hours)
-        return {
-            "username": self._username,
-            "date_deb": pd.to_datetime(tennis_date + f" {hour_from}:00"),
-            "date_fin": pd.to_datetime(tennis_date + f" {hour_to}:00"),
-            "tennis_name": soup.find("span", {"class": "tennis-name"}).text.replace("TENNIS ", ""),
-            "court_name": soup.find("span", {"class": "tennis-court"}).text,
-        }
+        Fill in the player's name, surname, and email in the form.
 
-    def get_reservations(self, users):
-        """
-        Fetch all reservations for users
         Args:
-            users (pandas.DataFrame): with columns
-
-        Returns:
-
+            name (str): The player's name.
+            surname (str): The player's surname.
+            email (str): The player's email.
         """
-        reservations = []
-        for _, user in users.iterrows():
-            try:
-                self.login(user.username, user.password)
-                reservations += [self.get_reservation()]
-                self.logout()
-            except KeyError:
-                logger.log(logging.WARNING, f"{user.username} cannot log in")
-        return pd.DataFrame(reservations).dropna()
-
-    def cancel(self):
-        response = self.request(
-            "post",
-            BOOKING_URL,
-            params={"page": "profil", "view": "ma_reservation"},
-            data={"annulation": "true"},
+        # Locate the name input field within the 'name' div and fill it
+        name_input = self.wait.until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div.firstname input[name='player1']"))
         )
-        return response
+        name_input.clear()
+        name_input.send_keys(name)
+        logger.info(f"Filled name: {name}")
+
+        # Locate the surname input field within the 'firstname' div and fill it
+        surname_input = self.driver.find_element(By.CSS_SELECTOR, "div.name input[name='player1']")
+        surname_input.clear()
+        surname_input.send_keys(surname)
+        logger.info(f"Filled surname: {surname}")
+
+        # Locate the email input field within the 'email' div and fill it
+        if email:
+            email_input = self.driver.find_element(
+                By.CSS_SELECTOR, "div.email input[name='player1']"
+            )
+            email_input.clear()
+            email_input.send_keys(email)
+            logger.info(f"Filled email: {email}")
+
+    def search_courts(self, place, match_day, in_out, hour_from, hour_to):
+        self.driver.get(f"{BOOKING_URL}?page=recherche&view=recherche_creneau")
+        time.sleep(1)
+        self.driver.save_screenshot("after_navigating_to_booking_page.png")
+
+        # First, check for and close the initial modal popup
+        try:
+            # Wait for the modal to appear
+            WebDriverWait(self.driver, 1).until(
+                EC.presence_of_element_located((By.ID, "closePopup"))
+            )
+
+            # Find and click the close button or the "Je continue" button
+            try:
+                close_button = self.driver.find_element(By.ID, "closePopup")
+                logger.info("Found closePopup button, clicking it")
+                self.driver.execute_script("arguments[0].click();", close_button)
+            except NoSuchElementException:
+                try:
+                    continue_button = self.driver.find_element(By.CSS_SELECTOR, ".popin.ignore")
+                    logger.info("Found 'Je continue' button, clicking it")
+                    self.driver.execute_script("arguments[0].click();", continue_button)
+                except NoSuchElementException:
+                    logger.warning("Could not find close or continue button on initial modal")
+
+            # Wait for the modal to disappear
+            time.sleep(1)
+
+        except TimeoutException:
+            logger.info("No initial modal popup found")
+
+        # Wait for the search form to load
+        # self.wait.until(EC.presence_of_element_located((By.NAME, "when")))
+
+        # Check for and close any other modal dialogs
+        try:
+            modal = self.driver.find_element(By.ID, "confirmModalGeneral")
+            if modal.is_displayed():
+                logger.info("Modal dialog found, attempting to close it")
+                close_button = self.driver.find_element(
+                    By.CSS_SELECTOR, "#confirmModalGeneral .close"
+                )
+                self.driver.execute_script("arguments[0].click();", close_button)
+                time.sleep(1)  # Wait for modal to close
+        except NoSuchElementException:
+            logger.info("No additional modal dialog found")
+
+        # =====================================================================
+        # PLACE SELECTION
+        # =====================================================================
+
+        # First, find the token input field - this is where we type
+        token_input = self.driver.find_element(By.CSS_SELECTOR, "#whereToken .tokens-input-text")
+        logger.info("Found token input field")
+
+        # Clear any existing tokens first
+        token_list = self.driver.find_element(By.ID, "whereToken")
+        token_items = token_list.find_elements(By.CSS_SELECTOR, "li.tokens-list-token-holder")
+
+        logger.info(f"Found {len(token_items)} existing tokens, removing them")
+        for token in token_items:
+            try:
+                close_btn = token.find_element(By.CSS_SELECTOR, "span.tokens-delete-token")
+                close_btn.click()  # Use normal click for human-like behavior
+                logger.info("Removed a token")
+                time.sleep(0.5)  # Small delay between removals
+            except:
+                logger.warning("Failed to remove a token")
+
+        # Now add each place one by one, exactly as a human would
+        logger.info(f"Adding place: {place}")
+
+        # Focus on the input field
+        token_input.click()
+        time.sleep(0.2)
+
+        # Clear any existing text
+        token_input.clear()
+        time.sleep(0.2)
+
+        # Type the place name character by character with small delays
+        for char in place:
+            token_input.send_keys(char)
+
+        # Wait for suggestions to appear - reduced wait time
+        time.sleep(0.5)
+
+        # Look for suggestions with the EXACT correct selector
+        suggestions = self.driver.find_elements(
+            By.CSS_SELECTOR, "li.tokens-suggestions-list-element"
+        )
+
+        logger.info(f"Found {len(suggestions)} suggestions for {place}")
+
+        # Log the text of each suggestion for debugging
+        for i, suggestion in enumerate(suggestions):
+            try:
+                suggestion_text = suggestion.text
+                logger.info(f"Suggestion {i+1}: '{suggestion_text}'")
+
+                # If this suggestion matches our place name, prioritize clicking it
+                if place.lower() in suggestion_text.lower():
+                    logger.info(f"Found matching suggestion: '{suggestion_text}'")
+                    target_suggestion = suggestion
+                    break
+            except:
+                logger.warning(f"Could not get text for suggestion {i+1}")
+        else:
+            # If no match found, use the first suggestion
+            target_suggestion = suggestions[0]
+            logger.info(f"Using first suggestion by default")
+
+        # Click the suggestion
+        target_suggestion.click()
+        logger.info(f"Clicked on suggestion for {place}")
+
+        # Wait for the token to be added - reduced wait time
+        time.sleep(0.3)
+
+        # Verify the token was added
+        current_tokens = self.driver.find_elements(
+            By.CSS_SELECTOR, "#whereToken li.tokens-list-token-holder"
+        )
+        logger.info(f"Current token count: {len(current_tokens)}")
+
+        # =====================================================================
+        # DATE SELECTION
+        # =====================================================================
+
+        # Set date
+        logger.info(f"Setting date to: {match_day}")
+        # The visible date input is readonly, but there's a hidden input that actually holds the value
+        # First find both inputs
+        visible_date_input = self.driver.find_element(By.ID, "when")
+        hidden_date_input = self.driver.find_element(By.ID, "whenIso")
+
+        logger.info(
+            f"Found date inputs - visible: {visible_date_input.get_attribute('value')}, hidden: {hidden_date_input.get_attribute('value')}"
+        )
+
+        # Set the hidden input value directly using JavaScript
+        self.driver.execute_script(f"document.getElementById('whenIso').value = '{match_day}';")
+        logger.info(f"Set hidden date input value to {match_day}")
+
+        # Also update the visible input for consistency
+        # First get the formatted date (assuming match_day is in DD/MM/YYYY format)
+        try:
+            # Convert to a more readable format for the visible field
+            date_obj = datetime.strptime(match_day, "%d/%m/%Y")
+            formatted_date = date_obj.strftime("%A %d %B %Y")
+
+            # Set the visible date
+            self.driver.execute_script(
+                f"document.getElementById('when').value = '{formatted_date}';"
+            )
+            logger.info(f"Set visible date input to {formatted_date}")
+        except Exception as e:
+            logger.warning(f"Could not format visible date: {str(e)}")
+
+        # Trigger change events on both inputs to ensure the site recognizes the change
+        self.driver.execute_script(
+            """
+            var hiddenInput = document.getElementById('whenIso');
+            var visibleInput = document.getElementById('when');
+
+            // Create and dispatch change events
+            var event = new Event('change', { 'bubbles': true });
+            hiddenInput.dispatchEvent(event);
+            visibleInput.dispatchEvent(event);
+        """
+        )
+        logger.info("Triggered change events on date inputs")
+
+        # =====================================================================
+        # INDOOR/OUTDOOR SELECTION
+        # =====================================================================
+
+        # Set in/out options (surface type)
+        logger.info(f"Setting in/out options (surface type): {in_out}")
+        # First click the dropdown button to open it
+        dropdown_button = self.driver.find_element(By.ID, "dropdownTerrain")
+        logger.info("Found dropdown button for terrain selection")
+
+        # Click to open the dropdown
+        dropdown_button.click()
+        logger.info("Clicked dropdown button to open terrain options")
+        time.sleep(0.3)
+
+        # Now find the checkboxes inside the dropdown
+        checkboxes = self.driver.find_elements(By.CSS_SELECTOR, "input[name='selInOut']")
+        logger.info(f"Found {len(checkboxes)} terrain checkboxes")
+
+        # Log the current state of checkboxes
+        for i, checkbox in enumerate(checkboxes):
+            value = checkbox.get_attribute("value")
+            id_attr = checkbox.get_attribute("id")
+            checked = checkbox.is_selected()
+            logger.info(f"Terrain checkbox {i+1}: id={id_attr}, value={value}, checked={checked}")
+
+        # We want to ensure only the options in in_out are checked
+        for checkbox in checkboxes:
+            value = checkbox.get_attribute("value")
+            should_check = value in in_out
+            is_checked = checkbox.is_selected()
+
+            if should_check != is_checked:
+                # Need to change the state
+                try:
+                    # Find the parent label and click it (more reliable than clicking the checkbox directly)
+                    label = self.driver.find_element(
+                        By.CSS_SELECTOR, f"label[for='{checkbox.get_attribute('id')}']"
+                    )
+                    label.click()
+                    logger.info(
+                        f"Clicked label for checkbox with value {value} to {'check' if should_check else 'uncheck'} it"
+                    )
+                    time.sleep(0.2)
+                except Exception as e:
+                    logger.warning(f"Could not click label: {str(e)}, trying direct checkbox click")
+                    try:
+                        # Try clicking the checkbox directly
+                        checkbox.click()
+                        logger.info(f"Clicked checkbox with value {value} directly")
+                        time.sleep(0.2)
+                    except Exception as e2:
+                        logger.warning(f"Direct click failed: {str(e2)}, trying JavaScript")
+                        # If direct click fails, try JavaScript
+                        self.driver.execute_script(
+                            "arguments[0].checked = arguments[1];", checkbox, should_check
+                        )
+                        logger.info(
+                            f"Set checkbox with value {value} to {should_check} using JavaScript"
+                        )
+
+        # Click elsewhere to close the dropdown
+        self.driver.find_element(By.TAG_NAME, "body").click()
+        time.sleep(0.3)
+
+        # =====================================================================
+        # HOUR RANGE SELECTION
+        # =====================================================================
+
+        # Set hour range
+        logger.info(f"Setting hour range: {hour_from} - {hour_to}")
+        # Convert hour strings to integers for comparison
+        hour_from_int = int(hour_from.split(":")[0] if ":" in hour_from else hour_from)
+        hour_to_int = int(hour_to.split(":")[0] if ":" in hour_to else hour_to)
+
+        # Find the slider element with the correct ID
+        slider = self.driver.find_element(By.ID, "slider")
+        logger.info("Found slider element with ID 'slider'")
+
+        # Get the slider handles
+        handles = slider.find_elements(By.CSS_SELECTOR, ".ui-slider-handle")
+        if len(handles) >= 2:
+            logger.info(f"Found {len(handles)} slider handles")
+
+            # Get the current values from the tooltips
+            tooltips = self.driver.find_elements(By.CSS_SELECTOR, ".tooltip-inner")
+            if len(tooltips) >= 2:
+                current_from = tooltips[0].text
+                current_to = tooltips[1].text
+                logger.info(f"Current slider range: {current_from} - {current_to}")
+
+        # Calculate the positions based on the available range (8h to 22h = 14 hours)
+        min_hour = 8  # The minimum hour on the slider
+        max_hour = 22  # The maximum hour on the slider
+        total_range = max_hour - min_hour
+
+        # Calculate percentages for the handles
+        from_percent = ((hour_from_int - min_hour) / total_range) * 100
+        to_percent = ((hour_to_int - min_hour) / total_range) * 100
+
+        logger.info(f"Setting slider handles to {from_percent}% and {to_percent}%")
+
+        # Use JavaScript to set the slider values directly
+        js_code = f"""
+        // Set the slider handles
+        var slider = $('#slider');
+        if (slider.slider) {{
+            // Set the values
+            slider.slider('values', 0, {hour_from_int - min_hour});
+            slider.slider('values', 1, {hour_to_int - min_hour});
+
+            // Update the tooltips
+            $('.tooltip1 .tooltip-inner').text('{hour_from_int}h');
+            $('.tooltip2 .tooltip-inner').text('{hour_to_int}h');
+
+            // Update the handle positions
+            $('.ui-slider-handle').eq(0).css('left', '{from_percent}%');
+            $('.ui-slider-handle').eq(1).css('left', '{to_percent}%');
+
+            // Update the range
+            $('.ui-slider-range').css({{
+                'left': '{from_percent}%',
+                'width': '{to_percent - from_percent}%'
+            }});
+
+            console.log('Set slider range to {hour_from_int}h-{hour_to_int}h');
+            return true;
+        }}
+        return false;
+        """
+
+        success = self.driver.execute_script(js_code)
+        if success:
+            logger.info(
+                f"Successfully set hour range using jQuery slider API: {hour_from_int}h - {hour_to_int}h"
+            )
+        else:
+            logger.warning("jQuery slider API not available, trying direct DOM manipulation")
+
+            # Try direct DOM manipulation
+            js_direct = f"""
+            // Set handle positions directly
+            document.querySelectorAll('.ui-slider-handle')[0].style.left = '{from_percent}%';
+            document.querySelectorAll('.ui-slider-handle')[1].style.left = '{to_percent}%';
+
+            // Update tooltips
+            document.querySelector('.tooltip1 .tooltip-inner').textContent = '{hour_from_int}h';
+            document.querySelector('.tooltip2 .tooltip-inner').textContent = '{hour_to_int}h';
+
+            // Update range
+            var range = document.querySelector('.ui-slider-range');
+            range.style.left = '{from_percent}%';
+            range.style.width = '{to_percent - from_percent}%';
+            """
+
+            self.driver.execute_script(js_direct)
+            logger.info(
+                f"Set hour range using direct DOM manipulation: {hour_from_int}h - {hour_to_int}h"
+            )
+
+        # =====================================================================
+        # SUBMIT SEARCH
+        # =====================================================================
+
+        # Add a short pause for manual inspection if need
+        logger.info("Pausing briefly before search...")
+        time.sleep(1.5)
+
+        # Find and click the search button
+        search_button = self.driver.find_element(By.CSS_SELECTOR, "button[type='submit']")
+        logger.info("Clicking search button")
+        search_button.click()
+        time.sleep(2)
+        logger.info("Clicked search button directly")
