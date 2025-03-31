@@ -41,6 +41,7 @@ def book(row):
     logger.log(logging.INFO, message)
     booking_service = BookingService()
     place, time = booking_service.find_courts_without_login(**row)
+    subject = None
     if not place:
         message = f"No court available for {row['username']} playing on {row['match_day']}"
         logger.log(logging.INFO, message)
