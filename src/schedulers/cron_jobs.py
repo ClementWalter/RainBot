@@ -66,7 +66,7 @@ def book(row):
     except Exception as e:
         info = pd.Series(row.copy()).astype(str).to_dict()
         del info["password"]
-        logger.log(logging.ERROR, f"Raising error {e} for\n{json.dumps(info, indent=4)}")
+        logger.log(logging.ERROR, f"Raising error for\n{json.dumps(info, indent=4)}:\n {e}")
         subject = f"{subject} : {e}"
     finally:
         if subject is not None:

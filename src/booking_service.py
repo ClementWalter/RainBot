@@ -124,15 +124,22 @@ class BookingService:
     ):
         self.login(username, password)
         self.driver.save_screenshot("after_login.png")
+        if self.has_booking():
+            logger.info("Already has a booking")
+            return None
 
         self.search_courts(place, match_day, in_out, hour_from, hour_to)
         self.driver.save_screenshot("after_search.png")
 
         # Wait for the booking button to be present
-        self.wait.until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "button.buttonAllOk")),
-            message="Booking button not found within the expected time.",
-        )
+        try:
+            self.wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "button.buttonAllOk")),
+                message="Booking button not found within the expected time.",
+            )
+        except TimeoutException:
+            logger.error("buttonAllOk not found")
+            return None
 
         booking_buttons = self.driver.find_elements(By.CSS_SELECTOR, "button.buttonAllOk")
         if booking_buttons:
@@ -647,3 +654,15 @@ class BookingService:
         search_button.click()
         time.sleep(2)
         logger.info("Clicked search button directly")
+
+    def has_booking(self):
+        self.driver.get(f"{BOOKING_URL}?page=profil&view=ma_reservation")
+        time.sleep(1)
+        self.driver.save_screenshot("reservation_page.png")
+        try:
+            self.driver.find_element(
+                By.CSS_SELECTOR, "button#annuler.btn.btn-darkblue.cancel-button"
+            )
+            return True
+        except NoSuchElementException:
+            return False
