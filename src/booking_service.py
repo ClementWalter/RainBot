@@ -100,7 +100,13 @@ class BookingService:
             timeout=10,
         )
         soup = BeautifulSoup(response.text, features="html5lib")
-        return [court.text[:2] for court in soup.find_all("h4", {"class": "panel-title"})]
+        times = sorted([court.text[:2] for court in soup.find_all("h4", {"class": "panel-title"})])
+        if not times:
+            return None, None
+        place = soup.select('li.active[role="presentation"] > a[role="tab"] > span.tennis-label')[
+            0
+        ].text.strip()
+        return place, int(times[0])
 
     def book_court(
         self,
@@ -183,7 +189,7 @@ class BookingService:
         self.wait.until(EC.url_contains("reservation"))
         self.driver.save_screenshot("after_waiting_for_payment_processing.png")
 
-        message = f"Court successfully paid for {self._username}"
+        message = f"Court successfully paid for {username}"
         logger.log(logging.INFO, message)
 
     def login(self, username, password):

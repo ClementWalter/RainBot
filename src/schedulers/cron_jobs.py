@@ -40,14 +40,16 @@ def book(row):
     message = f"Booking for {row['username']} playing on {row['match_day']}"
     logger.log(logging.INFO, message)
     booking_service = BookingService()
-    courts = booking_service.find_courts_without_login(**row)
-    if not courts:
+    place, time = booking_service.find_courts_without_login(**row)
+    if not place:
         message = f"No court available for {row['username']} playing on {row['match_day']}"
         logger.log(logging.INFO, message)
         return
     try:
         logger.log(logging.INFO, f"Found court for {row['username']}, booking it")
-        response = booking_service.book_court(**row)
+        response = booking_service.book_court(
+            place=place, **{**row, "hour_from": f"{time:02d}", "hour_to": f"{time + 1:02d}"}
+        )
         subject = "Nouvelle réservation Rainbot !"
         drive_client.append_series_to_sheet(
             sheet_title="Historique",
