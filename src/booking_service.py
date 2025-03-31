@@ -76,7 +76,8 @@ class BookingService:
             logger.error(f"Failed to initialize WebDriver: {str(e)}")
             raise
 
-    def find_courts_without_login(self, places, match_day, in_out, hour_from, hour_to, *_, **__):
+    @staticmethod
+    def find_courts_without_login(places, match_day, in_out, hour_from, hour_to, *_, **__):
         """
         Args:
             places (list): places where to look spot in
@@ -100,13 +101,17 @@ class BookingService:
             timeout=10,
         )
         soup = BeautifulSoup(response.text, features="html5lib")
-        times = sorted([court.text[:2] for court in soup.find_all("h4", {"class": "panel-title"})])
-        if not times:
+        courts = [court for court in soup.find_all("h4", {"class": "panel-title"})]
+        if not courts:
             return None, None
-        place = soup.select('li.active[role="presentation"] > a[role="tab"] > span.tennis-label')[
-            0
-        ].text.strip()
-        return place, int(times[0])
+        court = courts[0]
+        place = [
+            p
+            for p in places
+            if p.replace(" ", "")
+            == court.find_parent("div", attrs={"role": "tabpanel"}).attrs["id"]
+        ][0]
+        return place, int(court.text[:2])
 
     def book_court(
         self,

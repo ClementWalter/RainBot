@@ -41,17 +41,15 @@ def book(row):
     logger.log(logging.INFO, message)
     booking_service = BookingService()
     place, time = booking_service.find_courts_without_login(**row)
-    subject = None
     if not place:
         message = f"No court available for {row['username']} playing on {row['match_day']}"
         logger.log(logging.INFO, message)
         return
     try:
         logger.log(logging.INFO, f"Found court for {row['username']}, booking it")
-        response = booking_service.book_court(
+        booking_service.book_court(
             place=place, **{**row, "hour_from": f"{time:02d}", "hour_to": f"{time + 1:02d}"}
         )
-        subject = "Nouvelle réservation Rainbot !"
         drive_client.append_series_to_sheet(
             sheet_title="Historique",
             data=(
@@ -68,16 +66,7 @@ def book(row):
         info = pd.Series(row.copy()).astype(str).to_dict()
         del info["password"]
         logger.log(logging.ERROR, f"Raising error for\n{json.dumps(info, indent=4)}:\n {e}")
-        subject = f"{subject} : {e}"
     finally:
-        if subject is not None:
-            email_service.send_mail(
-                {
-                    "email": row["username"],
-                    "subject": subject,
-                    "message": getattr(response, "text") if hasattr(response, "text") else "",
-                }
-            )
         booking_service.logout()
 
 
