@@ -45,7 +45,7 @@ class BookingService:
         """Set up the Selenium WebDriver with appropriate options for visible operation."""
         chrome_options = Options()
         # Remove headless mode to make the browser visible
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
