@@ -44,14 +44,22 @@ class BookingService:
     def _setup_driver(self):
         """Set up the Selenium WebDriver with appropriate options for visible operation."""
         chrome_options = Options()
-        # Remove headless mode to make the browser visible
+
+        # Create a unique temporary directory for this session
+        import tempfile
+        import uuid
+
+        temp_dir = tempfile.mkdtemp()
+        user_data_dir = f"{temp_dir}/chrome-data-{uuid.uuid4()}"
+
+        chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
         chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument(
-            "--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.6998.165 Safari/537.36"
         )
 
         # For Heroku deployment
@@ -68,13 +76,14 @@ class BookingService:
 
             # Set page load timeout
             self.driver.set_page_load_timeout(30)
-
-            # Create a wait object for explicit waits
             self.wait = WebDriverWait(self.driver, 10)
 
         except Exception as e:
             logger.error(f"Failed to initialize WebDriver: {str(e)}")
             raise
+
+        # Store the temp directory path for cleanup
+        self._temp_dir = temp_dir
 
     @staticmethod
     def find_courts_without_login(places, match_day, in_out, hour_from, hour_to, *_, **__):
@@ -671,3 +680,19 @@ class BookingService:
             return True
         except NoSuchElementException:
             return False
+
+    def __del__(self):
+        """Cleanup method to remove temporary directory and quit driver."""
+        if hasattr(self, "driver"):
+            try:
+                self.driver.quit()
+            except:
+                pass
+
+        if hasattr(self, "_temp_dir"):
+            import shutil
+
+            try:
+                shutil.rmtree(self._temp_dir)
+            except:
+                pass
